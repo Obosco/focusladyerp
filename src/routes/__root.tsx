@@ -77,23 +77,27 @@ export const Route = createRootRouteWithContext<{ queryClient: QueryClient }>()(
     meta: [
       { charSet: "utf-8" },
       { name: "viewport", content: "width=device-width, initial-scale=1" },
-      { title: "Lovable App" },
-      { name: "description", content: "Lovable Generated Project" },
-      { name: "author", content: "Lovable" },
-      { property: "og:title", content: "Lovable App" },
-      { property: "og:description", content: "Lovable Generated Project" },
+      { title: "Focus Lady Bra ERP" },
+      {
+        name: "description",
+        content:
+          "Cloud ERP for Focus Lady Bra — sales, stock, HR, payroll and accounts synced live with Google Sheets.",
+      },
+      { name: "author", content: "Focus Lady Bra" },
+      { property: "og:title", content: "Focus Lady Bra ERP" },
+      {
+        property: "og:description",
+        content: "Cloud ERP synced with Google Sheets for Focus Lady Bra.",
+      },
       { property: "og:type", content: "website" },
       { name: "twitter:card", content: "summary_large_image" },
-      { name: "twitter:site", content: "@Lovable" },
     ],
     links: [
-      {
-        rel: "stylesheet",
-        href: appCss,
-      },
+      { rel: "stylesheet", href: appCss },
       { rel: "icon", href: "/favicon.ico", type: "image/x-icon" },
     ],
   }),
+
   shellComponent: RootShell,
   component: RootComponent,
   notFoundComponent: NotFoundComponent,
