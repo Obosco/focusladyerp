@@ -1,11 +1,12 @@
-import { createFileRoute } from "@tanstack/react-router";
+import { createFileRoute, Link } from "@tanstack/react-router";
 import { queryOptions, useSuspenseQuery } from "@tanstack/react-query";
 import { Suspense } from "react";
 import { ErpShell } from "@/components/ErpShell";
 import { getSheetsBatch } from "@/lib/sheets.functions";
 import { MODULES } from "@/lib/erp-modules";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { RefreshCcw } from "lucide-react";
+import { Plus, RefreshCcw } from "lucide-react";
+
 import { Button } from "@/components/ui/button";
 
 const KPI_RANGES = [
