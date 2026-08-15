@@ -8,12 +8,15 @@ import { getModuleBySlug, SPREADSHEET_ID } from "@/lib/erp-modules";
 import { Button } from "@/components/ui/button";
 import { ExternalLink, RefreshCcw } from "lucide-react";
 
+const q = (sheet: string) => (/[^A-Za-z0-9_]/.test(sheet) ? `'${sheet}'` : sheet);
+
 const sheetQuery = (sheet: string) =>
   queryOptions({
     queryKey: ["erp", "sheet", sheet],
-    queryFn: () => getSheetRange({ data: { range: `${sheet}!A1:Z2000` } }),
+    queryFn: () => getSheetRange({ data: { range: `${q(sheet)}!A1:Z2000` } }),
     staleTime: 30_000,
   });
+
 
 export const Route = createFileRoute("/sheet/$slug")({
   head: ({ params }) => {
@@ -79,16 +82,25 @@ function SheetPage() {
       }
     >
       <Suspense fallback={<div className="text-sm text-muted-foreground">Loading…</div>}>
-        <SheetView sheet={mod.sheet} filename={mod.slug} />
+        <SheetView sheet={mod.sheet} filename={mod.slug} title={mod.label} />
       </Suspense>
     </ErpShell>
   );
 }
 
-function SheetView({ sheet, filename }: { sheet: string; filename: string }) {
+function SheetView({
+  sheet,
+  filename,
+  title,
+}: {
+  sheet: string;
+  filename: string;
+  title: string;
+}) {
   const { data } = useSuspenseQuery(sheetQuery(sheet));
   const values = data.values;
   const headers = values[0] ?? [];
   const rows = values.slice(1);
-  return <SheetTable headers={headers} rows={rows} filename={filename} />;
+  return <SheetTable headers={headers} rows={rows} filename={filename} title={title} />;
 }
+

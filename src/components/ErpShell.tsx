@@ -1,7 +1,7 @@
 import { Link, useRouterState } from "@tanstack/react-router";
 import { MODULES, GROUPS, SPREADSHEET_ID, type ErpModule } from "@/lib/erp-modules";
 import { cn } from "@/lib/utils";
-import { ExternalLink } from "lucide-react";
+import { ExternalLink, FilePlus2, History, Receipt } from "lucide-react";
 import type { ReactNode } from "react";
 
 function NavItem({ mod, active }: { mod: ErpModule; active: boolean }) {
@@ -48,6 +48,33 @@ export function ErpShell({
             <div className="text-base font-semibold text-sidebar-foreground">ERP</div>
           </div>
           <nav className="flex-1 overflow-y-auto px-3 py-4">
+            <div className="mb-4">
+              <div className="mb-1 px-3 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
+                Invoicing
+              </div>
+              <div className="flex flex-col gap-0.5">
+                {[
+                  { to: "/invoices/new", label: "New Invoice", Icon: FilePlus2, slug: "invoices" },
+                  { to: "/invoices", label: "Invoices", Icon: Receipt, slug: "invoices" },
+                  { to: "/downloads", label: "Downloads", Icon: History, slug: "downloads" },
+                ].map((l) => (
+                  <Link
+                    key={l.to}
+                    to={l.to}
+                    className={cn(
+                      "flex items-center gap-2 rounded-md px-3 py-2 text-sm transition-colors",
+                      path === l.to
+                        ? "bg-sidebar-primary text-sidebar-primary-foreground"
+                        : "text-sidebar-foreground hover:bg-sidebar-accent hover:text-sidebar-accent-foreground",
+                    )}
+                  >
+                    <l.Icon className="h-4 w-4 shrink-0" />
+                    <span className="truncate">{l.label}</span>
+                  </Link>
+                ))}
+              </div>
+            </div>
+
             {GROUPS.map((g) => (
               <div key={g} className="mb-4">
                 <div className="mb-1 px-3 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">

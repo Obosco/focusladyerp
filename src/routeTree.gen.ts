@@ -9,12 +9,26 @@
 // Additionally, you should also exclude this file from your linter and/or formatter to prevent it from being checked or modified.
 
 import { Route as rootRouteImport } from './routes/__root'
+import { Route as DownloadsRouteImport } from './routes/downloads'
 import { Route as IndexRouteImport } from './routes/index'
+import { Route as InvoicesIndexRouteImport } from './routes/invoices.index'
 import { Route as SheetSlugRouteImport } from './routes/sheet.$slug'
+import { Route as InvoicesNewRouteImport } from './routes/invoices.new'
+import { Route as InvoicesInvoiceRouteImport } from './routes/invoices.$invoice'
 
+const DownloadsRoute = DownloadsRouteImport.update({
+  id: '/downloads',
+  path: '/downloads',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const IndexRoute = IndexRouteImport.update({
   id: '/',
   path: '/',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const InvoicesIndexRoute = InvoicesIndexRouteImport.update({
+  id: '/invoices/',
+  path: '/invoices/',
   getParentRoute: () => rootRouteImport,
 } as any)
 const SheetSlugRoute = SheetSlugRouteImport.update({
@@ -22,40 +36,99 @@ const SheetSlugRoute = SheetSlugRouteImport.update({
   path: '/sheet/$slug',
   getParentRoute: () => rootRouteImport,
 } as any)
+const InvoicesNewRoute = InvoicesNewRouteImport.update({
+  id: '/invoices/new',
+  path: '/invoices/new',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const InvoicesInvoiceRoute = InvoicesInvoiceRouteImport.update({
+  id: '/invoices/$invoice',
+  path: '/invoices/$invoice',
+  getParentRoute: () => rootRouteImport,
+} as any)
 
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
+  '/downloads': typeof DownloadsRoute
+  '/invoices/$invoice': typeof InvoicesInvoiceRoute
+  '/invoices/new': typeof InvoicesNewRoute
   '/sheet/$slug': typeof SheetSlugRoute
+  '/invoices/': typeof InvoicesIndexRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
+  '/downloads': typeof DownloadsRoute
+  '/invoices/$invoice': typeof InvoicesInvoiceRoute
+  '/invoices/new': typeof InvoicesNewRoute
   '/sheet/$slug': typeof SheetSlugRoute
+  '/invoices': typeof InvoicesIndexRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
   '/': typeof IndexRoute
+  '/downloads': typeof DownloadsRoute
+  '/invoices/$invoice': typeof InvoicesInvoiceRoute
+  '/invoices/new': typeof InvoicesNewRoute
   '/sheet/$slug': typeof SheetSlugRoute
+  '/invoices/': typeof InvoicesIndexRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
-  fullPaths: '/' | '/sheet/$slug'
+  fullPaths:
+    | '/'
+    | '/downloads'
+    | '/invoices/$invoice'
+    | '/invoices/new'
+    | '/sheet/$slug'
+    | '/invoices/'
   fileRoutesByTo: FileRoutesByTo
-  to: '/' | '/sheet/$slug'
-  id: '__root__' | '/' | '/sheet/$slug'
+  to:
+    | '/'
+    | '/downloads'
+    | '/invoices/$invoice'
+    | '/invoices/new'
+    | '/sheet/$slug'
+    | '/invoices'
+  id:
+    | '__root__'
+    | '/'
+    | '/downloads'
+    | '/invoices/$invoice'
+    | '/invoices/new'
+    | '/sheet/$slug'
+    | '/invoices/'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
+  DownloadsRoute: typeof DownloadsRoute
+  InvoicesInvoiceRoute: typeof InvoicesInvoiceRoute
+  InvoicesNewRoute: typeof InvoicesNewRoute
   SheetSlugRoute: typeof SheetSlugRoute
+  InvoicesIndexRoute: typeof InvoicesIndexRoute
 }
 
 declare module '@tanstack/react-router' {
   interface FileRoutesByPath {
+    '/downloads': {
+      id: '/downloads'
+      path: '/downloads'
+      fullPath: '/downloads'
+      preLoaderRoute: typeof DownloadsRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/': {
       id: '/'
       path: '/'
       fullPath: '/'
       preLoaderRoute: typeof IndexRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/invoices/': {
+      id: '/invoices/'
+      path: '/invoices'
+      fullPath: '/invoices/'
+      preLoaderRoute: typeof InvoicesIndexRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/sheet/$slug': {
@@ -65,12 +138,30 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof SheetSlugRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/invoices/new': {
+      id: '/invoices/new'
+      path: '/invoices/new'
+      fullPath: '/invoices/new'
+      preLoaderRoute: typeof InvoicesNewRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/invoices/$invoice': {
+      id: '/invoices/$invoice'
+      path: '/invoices/$invoice'
+      fullPath: '/invoices/$invoice'
+      preLoaderRoute: typeof InvoicesInvoiceRouteImport
+      parentRoute: typeof rootRouteImport
+    }
   }
 }
 
 const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
+  DownloadsRoute: DownloadsRoute,
+  InvoicesInvoiceRoute: InvoicesInvoiceRoute,
+  InvoicesNewRoute: InvoicesNewRoute,
   SheetSlugRoute: SheetSlugRoute,
+  InvoicesIndexRoute: InvoicesIndexRoute,
 }
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)
