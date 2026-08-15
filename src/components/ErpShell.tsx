@@ -1,5 +1,6 @@
 import { Link, useRouterState } from "@tanstack/react-router";
 import { MODULES, GROUPS, SPREADSHEET_ID, type ErpModule } from "@/lib/erp-modules";
+import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import { ArrowLeft, ExternalLink, FilePlus2, History, Receipt } from "lucide-react";
 import type { ReactNode } from "react";
