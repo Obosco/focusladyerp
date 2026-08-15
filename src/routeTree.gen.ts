@@ -10,6 +10,7 @@
 
 import { Route as rootRouteImport } from './routes/__root'
 import { Route as DownloadsRouteImport } from './routes/downloads'
+import { Route as AnalyticsRouteImport } from './routes/analytics'
 import { Route as IndexRouteImport } from './routes/index'
 import { Route as InvoicesIndexRouteImport } from './routes/invoices.index'
 import { Route as SheetSlugRouteImport } from './routes/sheet.$slug'
@@ -19,6 +20,11 @@ import { Route as InvoicesInvoiceRouteImport } from './routes/invoices.$invoice'
 const DownloadsRoute = DownloadsRouteImport.update({
   id: '/downloads',
   path: '/downloads',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const AnalyticsRoute = AnalyticsRouteImport.update({
+  id: '/analytics',
+  path: '/analytics',
   getParentRoute: () => rootRouteImport,
 } as any)
 const IndexRoute = IndexRouteImport.update({
@@ -49,6 +55,7 @@ const InvoicesInvoiceRoute = InvoicesInvoiceRouteImport.update({
 
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
+  '/analytics': typeof AnalyticsRoute
   '/downloads': typeof DownloadsRoute
   '/invoices/$invoice': typeof InvoicesInvoiceRoute
   '/invoices/new': typeof InvoicesNewRoute
@@ -57,6 +64,7 @@ export interface FileRoutesByFullPath {
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
+  '/analytics': typeof AnalyticsRoute
   '/downloads': typeof DownloadsRoute
   '/invoices/$invoice': typeof InvoicesInvoiceRoute
   '/invoices/new': typeof InvoicesNewRoute
@@ -66,6 +74,7 @@ export interface FileRoutesByTo {
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
   '/': typeof IndexRoute
+  '/analytics': typeof AnalyticsRoute
   '/downloads': typeof DownloadsRoute
   '/invoices/$invoice': typeof InvoicesInvoiceRoute
   '/invoices/new': typeof InvoicesNewRoute
@@ -76,6 +85,7 @@ export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
   fullPaths:
     | '/'
+    | '/analytics'
     | '/downloads'
     | '/invoices/$invoice'
     | '/invoices/new'
@@ -84,6 +94,7 @@ export interface FileRouteTypes {
   fileRoutesByTo: FileRoutesByTo
   to:
     | '/'
+    | '/analytics'
     | '/downloads'
     | '/invoices/$invoice'
     | '/invoices/new'
@@ -92,6 +103,7 @@ export interface FileRouteTypes {
   id:
     | '__root__'
     | '/'
+    | '/analytics'
     | '/downloads'
     | '/invoices/$invoice'
     | '/invoices/new'
@@ -101,6 +113,7 @@ export interface FileRouteTypes {
 }
 export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
+  AnalyticsRoute: typeof AnalyticsRoute
   DownloadsRoute: typeof DownloadsRoute
   InvoicesInvoiceRoute: typeof InvoicesInvoiceRoute
   InvoicesNewRoute: typeof InvoicesNewRoute
@@ -115,6 +128,13 @@ declare module '@tanstack/react-router' {
       path: '/downloads'
       fullPath: '/downloads'
       preLoaderRoute: typeof DownloadsRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/analytics': {
+      id: '/analytics'
+      path: '/analytics'
+      fullPath: '/analytics'
+      preLoaderRoute: typeof AnalyticsRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/': {
@@ -157,6 +177,7 @@ declare module '@tanstack/react-router' {
 
 const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
+  AnalyticsRoute: AnalyticsRoute,
   DownloadsRoute: DownloadsRoute,
   InvoicesInvoiceRoute: InvoicesInvoiceRoute,
   InvoicesNewRoute: InvoicesNewRoute,

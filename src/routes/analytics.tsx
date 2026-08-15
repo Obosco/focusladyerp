@@ -189,8 +189,9 @@ function AnalyticsContent() {
       ],
       grouping,
     ).map((b) => {
-      const inn = (b as Record<string, number>)["In"] ?? 0;
-      const out = (b as Record<string, number>)["Out"] ?? 0;
+      const rec = b as unknown as Record<string, number>;
+      const inn = rec["In"] ?? 0;
+      const out = rec["Out"] ?? 0;
       return { period: b.period, In: inn, Out: out, Net: inn - out };
     });
 
