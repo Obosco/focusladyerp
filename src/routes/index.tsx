@@ -5,7 +5,7 @@ import { ErpShell } from "@/components/ErpShell";
 import { getSheetsBatch } from "@/lib/sheets.functions";
 import { MODULES } from "@/lib/erp-modules";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Plus, RefreshCcw } from "lucide-react";
+import { BarChart3, Plus, RefreshCcw } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 
@@ -80,6 +80,11 @@ function RefreshButton() {
       <Button size="sm" asChild>
         <Link to="/invoices/new">
           <Plus className="mr-2 h-4 w-4" /> New Invoice
+        </Link>
+      </Button>
+      <Button variant="outline" size="sm" asChild>
+        <Link to="/analytics">
+          <BarChart3 className="mr-2 h-4 w-4" /> Statistics
         </Link>
       </Button>
       <Button variant="outline" size="sm" onClick={() => window.location.reload()}>
