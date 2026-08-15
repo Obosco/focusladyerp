@@ -75,15 +75,19 @@ function DashboardPage() {
 
 function RefreshButton() {
   return (
-    <Button
-      variant="outline"
-      size="sm"
-      onClick={() => window.location.reload()}
-    >
-      <RefreshCcw className="mr-2 h-4 w-4" /> Refresh
-    </Button>
+    <>
+      <Button size="sm" asChild>
+        <Link to="/invoices/new">
+          <Plus className="mr-2 h-4 w-4" /> New Invoice
+        </Link>
+      </Button>
+      <Button variant="outline" size="sm" onClick={() => window.location.reload()}>
+        <RefreshCcw className="mr-2 h-4 w-4" /> Refresh
+      </Button>
+    </>
   );
 }
+
 
 function DashboardContent() {
   const { data } = useSuspenseQuery(dashboardQuery);
