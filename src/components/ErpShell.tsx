@@ -1,7 +1,7 @@
 import { Link, useRouterState } from "@tanstack/react-router";
 import { MODULES, GROUPS, SPREADSHEET_ID, type ErpModule } from "@/lib/erp-modules";
 import { cn } from "@/lib/utils";
-import { ExternalLink, FilePlus2, History, Receipt } from "lucide-react";
+import { ArrowLeft, ExternalLink, FilePlus2, History, Receipt } from "lucide-react";
 import type { ReactNode } from "react";
 
 function NavItem({ mod, active }: { mod: ErpModule; active: boolean }) {
