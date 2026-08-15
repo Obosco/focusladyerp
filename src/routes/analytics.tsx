@@ -346,14 +346,18 @@ function AnalyticsContent() {
           />
         </div>
         <div className="flex gap-1">
-          {(["day", "week", "month"] as Grouping[]).map((g) => (
+          {([
+            { key: "day", label: "Daily" },
+            { key: "week", label: "Weekly" },
+            { key: "month", label: "Monthly" },
+          ] as { key: Grouping; label: string }[]).map((g) => (
             <Button
-              key={g}
+              key={g.key}
               size="sm"
-              variant={grouping === g ? "secondary" : "ghost"}
-              onClick={() => setGrouping(g)}
+              variant={grouping === g.key ? "secondary" : "ghost"}
+              onClick={() => setGrouping(g.key)}
             >
-              {g[0]!.toUpperCase() + g.slice(1)}ly
+              {g.label}
             </Button>
           ))}
         </div>
