@@ -1,7 +1,8 @@
 import { Link, useRouterState } from "@tanstack/react-router";
 import { MODULES, GROUPS, SPREADSHEET_ID, type ErpModule } from "@/lib/erp-modules";
+import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
-import { ExternalLink, FilePlus2, History, Receipt } from "lucide-react";
+import { ArrowLeft, ExternalLink, FilePlus2, History, Receipt } from "lucide-react";
 import type { ReactNode } from "react";
 
 function NavItem({ mod, active }: { mod: ErpModule; active: boolean }) {
@@ -111,11 +112,24 @@ export function ErpShell({
         <main className="flex-1">
           <header className="sticky top-0 z-10 border-b border-border bg-background/80 backdrop-blur">
             <div className="flex items-center justify-between gap-4 px-6 py-4">
-              <div>
-                <h1 className="text-xl font-semibold tracking-tight">{title}</h1>
-                {subtitle ? (
-                  <p className="text-sm text-muted-foreground">{subtitle}</p>
-                ) : null}
+              <div className="flex items-center gap-3">
+                {path !== "/" && (
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    aria-label="Go back"
+                    onClick={() => window.history.back()}
+                    className="shrink-0"
+                  >
+                    <ArrowLeft className="h-5 w-5" />
+                  </Button>
+                )}
+                <div>
+                  <h1 className="text-xl font-semibold tracking-tight">{title}</h1>
+                  {subtitle ? (
+                    <p className="text-sm text-muted-foreground">{subtitle}</p>
+                  ) : null}
+                </div>
               </div>
               <div className="flex items-center gap-2">{actions}</div>
             </div>
