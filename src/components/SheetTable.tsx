@@ -1,8 +1,9 @@
 import { useMemo, useState } from "react";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
-import { Download, FileText, Printer, Search, X } from "lucide-react";
+import { ArrowDown, ArrowUp, Download, FileText, Printer, Search, X } from "lucide-react";
 import { exportTablePdf, recordDownload, safeName, stamp } from "@/lib/pdf";
+import { PRESETS, presetRange, toNum, type PresetKey } from "@/lib/stats";
 
 function findDateCol(headers: string[]) {
   const i = headers.findIndex((h) => /date|day/i.test(h ?? ""));
@@ -39,13 +40,45 @@ export function SheetTable({
   const [q, setQ] = useState("");
   const [from, setFrom] = useState("");
   const [to, setTo] = useState("");
+  const [preset, setPreset] = useState<PresetKey>("all");
+  const [colFilters, setColFilters] = useState<Record<number, string>>({});
+  const [sort, setSort] = useState<{ col: number; dir: "asc" | "desc" } | null>(null);
   const dateCol = useMemo(() => findDateCol(headers), [headers]);
+
+  // Columns worth offering as dropdown filters (few distinct text values).
+  const filterableCols = useMemo(() => {
+    const out: { index: number; values: string[] }[] = [];
+    headers.forEach((h, i) => {
+      if (i === dateCol || !h) return;
+      const set = new Set<string>();
+      for (const r of rows) {
+        const v = (r[i] ?? "").trim();
+        if (v) set.add(v);
+        if (set.size > 25) return;
+      }
+      if (set.size >= 2) out.push({ index: i, values: [...set].sort() });
+    });
+    return out.slice(0, 4);
+  }, [headers, rows, dateCol]);
+
+  const applyPreset = (key: PresetKey) => {
+    setPreset(key);
+    const r = presetRange(key);
+    if (key === "custom") return;
+    setFrom(r.from);
+    setTo(r.to);
+  };
 
   const filtered = useMemo(() => {
     let out = rows;
     if (q.trim()) {
       const needle = q.toLowerCase();
       out = out.filter((r) => r.some((c) => (c ?? "").toLowerCase().includes(needle)));
+    }
+    for (const [k, v] of Object.entries(colFilters)) {
+      if (!v) continue;
+      const i = Number(k);
+      out = out.filter((r) => (r[i] ?? "").trim() === v);
     }
     if (dateCol >= 0 && (from || to)) {
       out = out.filter((r) => {
@@ -56,8 +89,32 @@ export function SheetTable({
         return true;
       });
     }
+    if (sort) {
+      const { col, dir } = sort;
+      out = [...out].sort((a, b) => {
+        const av = a[col] ?? "";
+        const bv = b[col] ?? "";
+        const an = toNum(av);
+        const bn = toNum(bv);
+        const numeric = /^[\s₹$-]*[\d.,]+\s*$/.test(av) && /^[\s₹$-]*[\d.,]+\s*$/.test(bv);
+        const cmp = numeric ? an - bn : av.localeCompare(bv);
+        return dir === "asc" ? cmp : -cmp;
+      });
+    }
     return out;
-  }, [rows, q, from, to, dateCol]);
+  }, [rows, q, from, to, dateCol, colFilters, sort]);
+
+  const activeFilters =
+    (q ? 1 : 0) + (from || to ? 1 : 0) + Object.values(colFilters).filter(Boolean).length;
+
+  const clearAll = () => {
+    setQ("");
+    setFrom("");
+    setTo("");
+    setPreset("all");
+    setColFilters({});
+    setSort(null);
+  };
 
   const label = title ?? filename;
 
@@ -143,6 +200,43 @@ export function SheetTable({
               ) : null}
             </div>
           ) : null}
+          {dateCol >= 0 ? (
+            <div className="flex flex-wrap gap-1">
+              {PRESETS.filter((p) => p.key !== "custom").map((p) => (
+                <Button
+                  key={p.key}
+                  size="sm"
+                  variant={preset === p.key ? "secondary" : "ghost"}
+                  onClick={() => applyPreset(p.key)}
+                >
+                  {p.label}
+                </Button>
+              ))}
+            </div>
+          ) : null}
+          {filterableCols.map((f) => (
+            <select
+              key={f.index}
+              value={colFilters[f.index] ?? ""}
+              onChange={(e) =>
+                setColFilters((prev) => ({ ...prev, [f.index]: e.target.value }))
+              }
+              aria-label={`Filter by ${headers[f.index]}`}
+              className="h-9 rounded-md border border-input bg-background px-2 text-sm text-foreground"
+            >
+              <option value="">All {headers[f.index]}</option>
+              {f.values.map((v) => (
+                <option key={v} value={v}>
+                  {v}
+                </option>
+              ))}
+            </select>
+          ))}
+          {activeFilters > 0 ? (
+            <Button variant="ghost" size="sm" onClick={clearAll}>
+              <X className="mr-1 h-4 w-4" /> Clear ({activeFilters})
+            </Button>
+          ) : null}
         </div>
         <div className="flex gap-2">
           <Button variant="outline" size="sm" onClick={downloadCsv}>
@@ -164,7 +258,28 @@ export function SheetTable({
               <tr>
                 {headers.map((h, i) => (
                   <th key={i} className="px-4 py-3 font-medium">
-                    {h || `Col ${i + 1}`}
+                    <button
+                      type="button"
+                      className="flex items-center gap-1 hover:text-foreground"
+                      onClick={() =>
+                        setSort((prev) =>
+                          prev && prev.col === i
+                            ? prev.dir === "asc"
+                              ? { col: i, dir: "desc" }
+                              : null
+                            : { col: i, dir: "asc" },
+                        )
+                      }
+                    >
+                      {h || `Col ${i + 1}`}
+                      {sort?.col === i ? (
+                        sort.dir === "asc" ? (
+                          <ArrowUp className="h-3 w-3" />
+                        ) : (
+                          <ArrowDown className="h-3 w-3" />
+                        )
+                      ) : null}
+                    </button>
                   </th>
                 ))}
               </tr>
