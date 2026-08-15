@@ -42,10 +42,12 @@ export const MODULES: ErpModule[] = [
   { slug: "suppliers", sheet: "Suppliers", label: "Suppliers", group: "Masters", icon: Truck },
 
   { slug: "sales", sheet: "Sales", label: "Sales", group: "Transactions", icon: Receipt },
+  { slug: "sale-items", sheet: "Sale Items", label: "Sale Items", group: "Transactions", icon: ListChecks },
   { slug: "purchases", sheet: "Purchases", label: "Purchases", group: "Transactions", icon: ShoppingCart },
   { slug: "collection", sheet: "Daily Collection", label: "Daily Collection", group: "Transactions", icon: Wallet },
   { slug: "expenses", sheet: "Expenses", label: "Expenses", group: "Transactions", icon: CreditCard },
   { slug: "stock", sheet: "Stock", label: "Stock", group: "Transactions", icon: Boxes },
+
 
   { slug: "cash-book", sheet: "Cash Book", label: "Cash Book", group: "Accounts", icon: BookOpen },
   { slug: "customer-ledger", sheet: "Customer Ledger", label: "Customer Ledger", group: "Accounts", icon: UserCheck },
