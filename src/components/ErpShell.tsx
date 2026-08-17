@@ -1,9 +1,20 @@
-import { Link, useRouterState } from "@tanstack/react-router";
+import { Link, useNavigate, useRouterState } from "@tanstack/react-router";
 import { MODULES, GROUPS, SPREADSHEET_ID, type ErpModule } from "@/lib/erp-modules";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
-import { ArrowLeft, BarChart3, ExternalLink, FilePlus2, History, Receipt } from "lucide-react";
+import {
+  ArrowLeft,
+  BarChart3,
+  ExternalLink,
+  FilePlus2,
+  LogOut,
+  Receipt,
+  Settings,
+} from "lucide-react";
+import { signOutClean } from "@/lib/session";
+import { useQueryClient } from "@tanstack/react-query";
 import type { ReactNode } from "react";
+
 
 function NavItem({ mod, active }: { mod: ErpModule; active: boolean }) {
   const Icon = mod.icon;
