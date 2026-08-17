@@ -14,12 +14,6 @@ import {
   UserCheck,
   UserCog,
   TrendingUp,
-  Scale,
-  ListChecks,
-  ArrowLeftRight,
-  Landmark,
-  BadgeDollarSign,
-  CalendarCheck,
   type LucideIcon,
 } from "lucide-react";
 
@@ -27,7 +21,7 @@ export type ErpModule = {
   slug: string;
   sheet: string; // exact Google Sheet tab title
   label: string;
-  group: "Overview" | "Masters" | "Transactions" | "Accounts" | "HR";
+  group: "Overview" | "Masters" | "Transactions" | "Accounts";
   icon: LucideIcon;
 };
 
@@ -60,4 +54,4 @@ export const HIDDEN_SHEETS = ["Sale Items", "Download History"];
 export const getModuleBySlug = (slug: string) => MODULES.find((m) => m.slug === slug);
 export const getModuleBySheet = (sheet: string) => MODULES.find((m) => m.sheet === sheet);
 
-export const GROUPS: ErpModule["group"][] = ["Overview", "Masters", "Transactions", "Accounts", "HR"];
+export const GROUPS: ErpModule["group"][] = ["Overview", "Masters", "Transactions", "Accounts"];
