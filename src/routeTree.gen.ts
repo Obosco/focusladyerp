@@ -13,6 +13,7 @@ import { Route as ResetPasswordRouteImport } from './routes/reset-password'
 import { Route as AuthRouteImport } from './routes/auth'
 import { Route as AuthenticatedRouteRouteImport } from './routes/_authenticated/route'
 import { Route as AuthenticatedIndexRouteImport } from './routes/_authenticated/index'
+import { Route as AuthenticatedSettingsRouteImport } from './routes/_authenticated/settings'
 import { Route as AuthenticatedDownloadsRouteImport } from './routes/_authenticated/downloads'
 import { Route as AuthenticatedAnalyticsRouteImport } from './routes/_authenticated/analytics'
 import { Route as AuthenticatedInvoicesIndexRouteImport } from './routes/_authenticated/invoices.index'
@@ -37,6 +38,11 @@ const AuthenticatedRouteRoute = AuthenticatedRouteRouteImport.update({
 const AuthenticatedIndexRoute = AuthenticatedIndexRouteImport.update({
   id: '/',
   path: '/',
+  getParentRoute: () => AuthenticatedRouteRoute,
+} as any)
+const AuthenticatedSettingsRoute = AuthenticatedSettingsRouteImport.update({
+  id: '/settings',
+  path: '/settings',
   getParentRoute: () => AuthenticatedRouteRoute,
 } as any)
 const AuthenticatedDownloadsRoute = AuthenticatedDownloadsRouteImport.update({
@@ -79,6 +85,7 @@ export interface FileRoutesByFullPath {
   '/reset-password': typeof ResetPasswordRoute
   '/analytics': typeof AuthenticatedAnalyticsRoute
   '/downloads': typeof AuthenticatedDownloadsRoute
+  '/settings': typeof AuthenticatedSettingsRoute
   '/invoices/$invoice': typeof AuthenticatedInvoicesInvoiceRoute
   '/invoices/new': typeof AuthenticatedInvoicesNewRoute
   '/sheet/$slug': typeof AuthenticatedSheetSlugRoute
@@ -89,6 +96,7 @@ export interface FileRoutesByTo {
   '/reset-password': typeof ResetPasswordRoute
   '/analytics': typeof AuthenticatedAnalyticsRoute
   '/downloads': typeof AuthenticatedDownloadsRoute
+  '/settings': typeof AuthenticatedSettingsRoute
   '/': typeof AuthenticatedIndexRoute
   '/invoices/$invoice': typeof AuthenticatedInvoicesInvoiceRoute
   '/invoices/new': typeof AuthenticatedInvoicesNewRoute
@@ -102,6 +110,7 @@ export interface FileRoutesById {
   '/reset-password': typeof ResetPasswordRoute
   '/_authenticated/analytics': typeof AuthenticatedAnalyticsRoute
   '/_authenticated/downloads': typeof AuthenticatedDownloadsRoute
+  '/_authenticated/settings': typeof AuthenticatedSettingsRoute
   '/_authenticated/': typeof AuthenticatedIndexRoute
   '/_authenticated/invoices/$invoice': typeof AuthenticatedInvoicesInvoiceRoute
   '/_authenticated/invoices/new': typeof AuthenticatedInvoicesNewRoute
@@ -116,6 +125,7 @@ export interface FileRouteTypes {
     | '/reset-password'
     | '/analytics'
     | '/downloads'
+    | '/settings'
     | '/invoices/$invoice'
     | '/invoices/new'
     | '/sheet/$slug'
@@ -126,6 +136,7 @@ export interface FileRouteTypes {
     | '/reset-password'
     | '/analytics'
     | '/downloads'
+    | '/settings'
     | '/'
     | '/invoices/$invoice'
     | '/invoices/new'
@@ -138,6 +149,7 @@ export interface FileRouteTypes {
     | '/reset-password'
     | '/_authenticated/analytics'
     | '/_authenticated/downloads'
+    | '/_authenticated/settings'
     | '/_authenticated/'
     | '/_authenticated/invoices/$invoice'
     | '/_authenticated/invoices/new'
@@ -179,6 +191,13 @@ declare module '@tanstack/react-router' {
       path: '/'
       fullPath: '/'
       preLoaderRoute: typeof AuthenticatedIndexRouteImport
+      parentRoute: typeof AuthenticatedRouteRoute
+    }
+    '/_authenticated/settings': {
+      id: '/_authenticated/settings'
+      path: '/settings'
+      fullPath: '/settings'
+      preLoaderRoute: typeof AuthenticatedSettingsRouteImport
       parentRoute: typeof AuthenticatedRouteRoute
     }
     '/_authenticated/downloads': {
@@ -229,6 +248,7 @@ declare module '@tanstack/react-router' {
 interface AuthenticatedRouteRouteChildren {
   AuthenticatedAnalyticsRoute: typeof AuthenticatedAnalyticsRoute
   AuthenticatedDownloadsRoute: typeof AuthenticatedDownloadsRoute
+  AuthenticatedSettingsRoute: typeof AuthenticatedSettingsRoute
   AuthenticatedIndexRoute: typeof AuthenticatedIndexRoute
   AuthenticatedInvoicesInvoiceRoute: typeof AuthenticatedInvoicesInvoiceRoute
   AuthenticatedInvoicesNewRoute: typeof AuthenticatedInvoicesNewRoute
@@ -239,6 +259,7 @@ interface AuthenticatedRouteRouteChildren {
 const AuthenticatedRouteRouteChildren: AuthenticatedRouteRouteChildren = {
   AuthenticatedAnalyticsRoute: AuthenticatedAnalyticsRoute,
   AuthenticatedDownloadsRoute: AuthenticatedDownloadsRoute,
+  AuthenticatedSettingsRoute: AuthenticatedSettingsRoute,
   AuthenticatedIndexRoute: AuthenticatedIndexRoute,
   AuthenticatedInvoicesInvoiceRoute: AuthenticatedInvoicesInvoiceRoute,
   AuthenticatedInvoicesNewRoute: AuthenticatedInvoicesNewRoute,
