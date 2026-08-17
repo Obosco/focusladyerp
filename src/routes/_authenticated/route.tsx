@@ -28,12 +28,12 @@ function AuthenticatedLayout() {
     const interval = window.setInterval(async () => {
       if (isSessionExpired()) {
         await signOutClean();
-        navigate({ to: "/auth", replace: true });
+        navigate({ to: "/auth", search: { redirect: undefined }, replace: true });
       }
     }, 60_000);
 
     const { data: sub } = supabase.auth.onAuthStateChange((event) => {
-      if (event === "SIGNED_OUT") navigate({ to: "/auth", replace: true });
+      if (event === "SIGNED_OUT") navigate({ to: "/auth", search: { redirect: undefined }, replace: true });
     });
 
     return () => {
