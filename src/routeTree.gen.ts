@@ -9,180 +9,183 @@
 // Additionally, you should also exclude this file from your linter and/or formatter to prevent it from being checked or modified.
 
 import { Route as rootRouteImport } from './routes/__root'
-import { Route as DownloadsRouteImport } from './routes/downloads'
-import { Route as AnalyticsRouteImport } from './routes/analytics'
-import { Route as IndexRouteImport } from './routes/index'
-import { Route as InvoicesIndexRouteImport } from './routes/invoices.index'
-import { Route as SheetSlugRouteImport } from './routes/sheet.$slug'
-import { Route as InvoicesNewRouteImport } from './routes/invoices.new'
-import { Route as InvoicesInvoiceRouteImport } from './routes/invoices.$invoice'
+import { Route as AuthenticatedIndexRouteImport } from './routes/_authenticated/index'
+import { Route as AuthenticatedDownloadsRouteImport } from './routes/_authenticated/downloads'
+import { Route as AuthenticatedAnalyticsRouteImport } from './routes/_authenticated/analytics'
+import { Route as AuthenticatedInvoicesIndexRouteImport } from './routes/_authenticated/invoices.index'
+import { Route as AuthenticatedSheetSlugRouteImport } from './routes/_authenticated/sheet.$slug'
+import { Route as AuthenticatedInvoicesNewRouteImport } from './routes/_authenticated/invoices.new'
+import { Route as AuthenticatedInvoicesInvoiceRouteImport } from './routes/_authenticated/invoices.$invoice'
 
-const DownloadsRoute = DownloadsRouteImport.update({
-  id: '/downloads',
-  path: '/downloads',
-  getParentRoute: () => rootRouteImport,
-} as any)
-const AnalyticsRoute = AnalyticsRouteImport.update({
-  id: '/analytics',
-  path: '/analytics',
-  getParentRoute: () => rootRouteImport,
-} as any)
-const IndexRoute = IndexRouteImport.update({
-  id: '/',
+const AuthenticatedIndexRoute = AuthenticatedIndexRouteImport.update({
+  id: '/_authenticated/',
   path: '/',
   getParentRoute: () => rootRouteImport,
 } as any)
-const InvoicesIndexRoute = InvoicesIndexRouteImport.update({
-  id: '/invoices/',
-  path: '/invoices/',
+const AuthenticatedDownloadsRoute = AuthenticatedDownloadsRouteImport.update({
+  id: '/_authenticated/downloads',
+  path: '/downloads',
   getParentRoute: () => rootRouteImport,
 } as any)
-const SheetSlugRoute = SheetSlugRouteImport.update({
-  id: '/sheet/$slug',
+const AuthenticatedAnalyticsRoute = AuthenticatedAnalyticsRouteImport.update({
+  id: '/_authenticated/analytics',
+  path: '/analytics',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const AuthenticatedInvoicesIndexRoute =
+  AuthenticatedInvoicesIndexRouteImport.update({
+    id: '/_authenticated/invoices/',
+    path: '/invoices/',
+    getParentRoute: () => rootRouteImport,
+  } as any)
+const AuthenticatedSheetSlugRoute = AuthenticatedSheetSlugRouteImport.update({
+  id: '/_authenticated/sheet/$slug',
   path: '/sheet/$slug',
   getParentRoute: () => rootRouteImport,
 } as any)
-const InvoicesNewRoute = InvoicesNewRouteImport.update({
-  id: '/invoices/new',
-  path: '/invoices/new',
-  getParentRoute: () => rootRouteImport,
-} as any)
-const InvoicesInvoiceRoute = InvoicesInvoiceRouteImport.update({
-  id: '/invoices/$invoice',
-  path: '/invoices/$invoice',
-  getParentRoute: () => rootRouteImport,
-} as any)
+const AuthenticatedInvoicesNewRoute =
+  AuthenticatedInvoicesNewRouteImport.update({
+    id: '/_authenticated/invoices/new',
+    path: '/invoices/new',
+    getParentRoute: () => rootRouteImport,
+  } as any)
+const AuthenticatedInvoicesInvoiceRoute =
+  AuthenticatedInvoicesInvoiceRouteImport.update({
+    id: '/_authenticated/invoices/$invoice',
+    path: '/invoices/$invoice',
+    getParentRoute: () => rootRouteImport,
+  } as any)
 
 export interface FileRoutesByFullPath {
-  '/': typeof IndexRoute
-  '/analytics': typeof AnalyticsRoute
-  '/downloads': typeof DownloadsRoute
-  '/invoices/$invoice': typeof InvoicesInvoiceRoute
-  '/invoices/new': typeof InvoicesNewRoute
-  '/sheet/$slug': typeof SheetSlugRoute
-  '/invoices/': typeof InvoicesIndexRoute
+  '/analytics': typeof AuthenticatedAnalyticsRoute
+  '/downloads': typeof AuthenticatedDownloadsRoute
+  '/': typeof AuthenticatedIndexRoute
+  '/invoices/$invoice': typeof AuthenticatedInvoicesInvoiceRoute
+  '/invoices/new': typeof AuthenticatedInvoicesNewRoute
+  '/sheet/$slug': typeof AuthenticatedSheetSlugRoute
+  '/invoices/': typeof AuthenticatedInvoicesIndexRoute
 }
 export interface FileRoutesByTo {
-  '/': typeof IndexRoute
-  '/analytics': typeof AnalyticsRoute
-  '/downloads': typeof DownloadsRoute
-  '/invoices/$invoice': typeof InvoicesInvoiceRoute
-  '/invoices/new': typeof InvoicesNewRoute
-  '/sheet/$slug': typeof SheetSlugRoute
-  '/invoices': typeof InvoicesIndexRoute
+  '/analytics': typeof AuthenticatedAnalyticsRoute
+  '/downloads': typeof AuthenticatedDownloadsRoute
+  '/': typeof AuthenticatedIndexRoute
+  '/invoices/$invoice': typeof AuthenticatedInvoicesInvoiceRoute
+  '/invoices/new': typeof AuthenticatedInvoicesNewRoute
+  '/sheet/$slug': typeof AuthenticatedSheetSlugRoute
+  '/invoices': typeof AuthenticatedInvoicesIndexRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
-  '/': typeof IndexRoute
-  '/analytics': typeof AnalyticsRoute
-  '/downloads': typeof DownloadsRoute
-  '/invoices/$invoice': typeof InvoicesInvoiceRoute
-  '/invoices/new': typeof InvoicesNewRoute
-  '/sheet/$slug': typeof SheetSlugRoute
-  '/invoices/': typeof InvoicesIndexRoute
+  '/_authenticated/analytics': typeof AuthenticatedAnalyticsRoute
+  '/_authenticated/downloads': typeof AuthenticatedDownloadsRoute
+  '/_authenticated/': typeof AuthenticatedIndexRoute
+  '/_authenticated/invoices/$invoice': typeof AuthenticatedInvoicesInvoiceRoute
+  '/_authenticated/invoices/new': typeof AuthenticatedInvoicesNewRoute
+  '/_authenticated/sheet/$slug': typeof AuthenticatedSheetSlugRoute
+  '/_authenticated/invoices/': typeof AuthenticatedInvoicesIndexRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
   fullPaths:
-    | '/'
     | '/analytics'
     | '/downloads'
+    | '/'
     | '/invoices/$invoice'
     | '/invoices/new'
     | '/sheet/$slug'
     | '/invoices/'
   fileRoutesByTo: FileRoutesByTo
   to:
-    | '/'
     | '/analytics'
     | '/downloads'
+    | '/'
     | '/invoices/$invoice'
     | '/invoices/new'
     | '/sheet/$slug'
     | '/invoices'
   id:
     | '__root__'
-    | '/'
-    | '/analytics'
-    | '/downloads'
-    | '/invoices/$invoice'
-    | '/invoices/new'
-    | '/sheet/$slug'
-    | '/invoices/'
+    | '/_authenticated/analytics'
+    | '/_authenticated/downloads'
+    | '/_authenticated/'
+    | '/_authenticated/invoices/$invoice'
+    | '/_authenticated/invoices/new'
+    | '/_authenticated/sheet/$slug'
+    | '/_authenticated/invoices/'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
-  IndexRoute: typeof IndexRoute
-  AnalyticsRoute: typeof AnalyticsRoute
-  DownloadsRoute: typeof DownloadsRoute
-  InvoicesInvoiceRoute: typeof InvoicesInvoiceRoute
-  InvoicesNewRoute: typeof InvoicesNewRoute
-  SheetSlugRoute: typeof SheetSlugRoute
-  InvoicesIndexRoute: typeof InvoicesIndexRoute
+  AuthenticatedAnalyticsRoute: typeof AuthenticatedAnalyticsRoute
+  AuthenticatedDownloadsRoute: typeof AuthenticatedDownloadsRoute
+  AuthenticatedIndexRoute: typeof AuthenticatedIndexRoute
+  AuthenticatedInvoicesInvoiceRoute: typeof AuthenticatedInvoicesInvoiceRoute
+  AuthenticatedInvoicesNewRoute: typeof AuthenticatedInvoicesNewRoute
+  AuthenticatedSheetSlugRoute: typeof AuthenticatedSheetSlugRoute
+  AuthenticatedInvoicesIndexRoute: typeof AuthenticatedInvoicesIndexRoute
 }
 
 declare module '@tanstack/react-router' {
   interface FileRoutesByPath {
-    '/downloads': {
-      id: '/downloads'
-      path: '/downloads'
-      fullPath: '/downloads'
-      preLoaderRoute: typeof DownloadsRouteImport
-      parentRoute: typeof rootRouteImport
-    }
-    '/analytics': {
-      id: '/analytics'
-      path: '/analytics'
-      fullPath: '/analytics'
-      preLoaderRoute: typeof AnalyticsRouteImport
-      parentRoute: typeof rootRouteImport
-    }
-    '/': {
-      id: '/'
+    '/_authenticated/': {
+      id: '/_authenticated/'
       path: '/'
       fullPath: '/'
-      preLoaderRoute: typeof IndexRouteImport
+      preLoaderRoute: typeof AuthenticatedIndexRouteImport
       parentRoute: typeof rootRouteImport
     }
-    '/invoices/': {
-      id: '/invoices/'
+    '/_authenticated/downloads': {
+      id: '/_authenticated/downloads'
+      path: '/downloads'
+      fullPath: '/downloads'
+      preLoaderRoute: typeof AuthenticatedDownloadsRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/_authenticated/analytics': {
+      id: '/_authenticated/analytics'
+      path: '/analytics'
+      fullPath: '/analytics'
+      preLoaderRoute: typeof AuthenticatedAnalyticsRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/_authenticated/invoices/': {
+      id: '/_authenticated/invoices/'
       path: '/invoices'
       fullPath: '/invoices/'
-      preLoaderRoute: typeof InvoicesIndexRouteImport
+      preLoaderRoute: typeof AuthenticatedInvoicesIndexRouteImport
       parentRoute: typeof rootRouteImport
     }
-    '/sheet/$slug': {
-      id: '/sheet/$slug'
+    '/_authenticated/sheet/$slug': {
+      id: '/_authenticated/sheet/$slug'
       path: '/sheet/$slug'
       fullPath: '/sheet/$slug'
-      preLoaderRoute: typeof SheetSlugRouteImport
+      preLoaderRoute: typeof AuthenticatedSheetSlugRouteImport
       parentRoute: typeof rootRouteImport
     }
-    '/invoices/new': {
-      id: '/invoices/new'
+    '/_authenticated/invoices/new': {
+      id: '/_authenticated/invoices/new'
       path: '/invoices/new'
       fullPath: '/invoices/new'
-      preLoaderRoute: typeof InvoicesNewRouteImport
+      preLoaderRoute: typeof AuthenticatedInvoicesNewRouteImport
       parentRoute: typeof rootRouteImport
     }
-    '/invoices/$invoice': {
-      id: '/invoices/$invoice'
+    '/_authenticated/invoices/$invoice': {
+      id: '/_authenticated/invoices/$invoice'
       path: '/invoices/$invoice'
       fullPath: '/invoices/$invoice'
-      preLoaderRoute: typeof InvoicesInvoiceRouteImport
+      preLoaderRoute: typeof AuthenticatedInvoicesInvoiceRouteImport
       parentRoute: typeof rootRouteImport
     }
   }
 }
 
 const rootRouteChildren: RootRouteChildren = {
-  IndexRoute: IndexRoute,
-  AnalyticsRoute: AnalyticsRoute,
-  DownloadsRoute: DownloadsRoute,
-  InvoicesInvoiceRoute: InvoicesInvoiceRoute,
-  InvoicesNewRoute: InvoicesNewRoute,
-  SheetSlugRoute: SheetSlugRoute,
-  InvoicesIndexRoute: InvoicesIndexRoute,
+  AuthenticatedAnalyticsRoute: AuthenticatedAnalyticsRoute,
+  AuthenticatedDownloadsRoute: AuthenticatedDownloadsRoute,
+  AuthenticatedIndexRoute: AuthenticatedIndexRoute,
+  AuthenticatedInvoicesInvoiceRoute: AuthenticatedInvoicesInvoiceRoute,
+  AuthenticatedInvoicesNewRoute: AuthenticatedInvoicesNewRoute,
+  AuthenticatedSheetSlugRoute: AuthenticatedSheetSlugRoute,
+  AuthenticatedInvoicesIndexRoute: AuthenticatedInvoicesIndexRoute,
 }
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)

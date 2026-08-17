@@ -21,7 +21,7 @@ const mastersQuery = queryOptions({
   staleTime: 15_000,
 });
 
-export const Route = createFileRoute("/invoices/new")({
+export const Route = createFileRoute("/_authenticated/_authenticated/invoices/new")({
   head: () => ({
     meta: [
       { title: "New Invoice — Focus Lady Bra ERP" },

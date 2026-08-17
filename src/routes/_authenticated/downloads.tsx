@@ -13,7 +13,7 @@ const historyQuery = queryOptions({
   staleTime: 10_000,
 });
 
-export const Route = createFileRoute("/downloads")({
+export const Route = createFileRoute("/_authenticated/_authenticated/downloads")({
   head: () => ({
     meta: [
       { title: "Download History — Focus Lady Bra ERP" },
