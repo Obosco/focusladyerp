@@ -15,7 +15,7 @@ const invoiceQuery = (invoice: string) =>
     staleTime: 15_000,
   });
 
-export const Route = createFileRoute("/_authenticated/_authenticated/invoices/$invoice")({
+export const Route = createFileRoute("/_authenticated/invoices/$invoice")({
   head: ({ params }) => ({
     meta: [
       { title: `Invoice ${params.invoice} — Focus Lady Bra ERP` },

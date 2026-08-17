@@ -56,7 +56,7 @@ const analyticsQuery = queryOptions({
   staleTime: 30_000,
 });
 
-export const Route = createFileRoute("/_authenticated/_authenticated/analytics")({
+export const Route = createFileRoute("/_authenticated/analytics")({
   head: () => ({
     meta: [
       { title: "Statistics & Flow — Focus Lady Bra ERP" },

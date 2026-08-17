@@ -25,7 +25,7 @@ const dashboardQuery = queryOptions({
   staleTime: 30_000,
 });
 
-export const Route = createFileRoute("/_authenticated/_authenticated/")({
+export const Route = createFileRoute("/_authenticated/")({
   head: () => ({
     meta: [
       { title: "Focus Lady Bra ERP — Dashboard" },
