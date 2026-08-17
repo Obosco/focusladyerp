@@ -1,9 +1,20 @@
-import { Link, useRouterState } from "@tanstack/react-router";
+import { Link, useNavigate, useRouterState } from "@tanstack/react-router";
 import { MODULES, GROUPS, SPREADSHEET_ID, type ErpModule } from "@/lib/erp-modules";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
-import { ArrowLeft, BarChart3, ExternalLink, FilePlus2, History, Receipt } from "lucide-react";
+import {
+  ArrowLeft,
+  BarChart3,
+  ExternalLink,
+  FilePlus2,
+  LogOut,
+  Receipt,
+  Settings,
+} from "lucide-react";
+import { signOutClean } from "@/lib/session";
+import { useQueryClient } from "@tanstack/react-query";
 import type { ReactNode } from "react";
+
 
 function NavItem({ mod, active }: { mod: ErpModule; active: boolean }) {
   const Icon = mod.icon;
@@ -38,10 +49,20 @@ export function ErpShell({
   actions?: ReactNode;
 }) {
   const path = useRouterState({ select: (s) => s.location.pathname });
+  const navigate = useNavigate();
+  const queryClient = useQueryClient();
+
+  async function handleSignOut() {
+    await queryClient.cancelQueries();
+    queryClient.clear();
+    await signOutClean();
+    navigate({ to: "/auth", search: { redirect: undefined }, replace: true });
+  }
+
   return (
     <div className="min-h-screen bg-background text-foreground">
       <div className="flex">
-        <aside className="sticky top-0 hidden h-screen w-64 shrink-0 flex-col border-r border-sidebar-border bg-sidebar md:flex">
+        <aside className="sticky top-0 hidden h-screen w-60 shrink-0 flex-col border-r border-sidebar-border bg-sidebar md:flex">
           <div className="border-b border-sidebar-border px-5 py-4">
             <div className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
               Focus Lady Bra
@@ -55,10 +76,9 @@ export function ErpShell({
               </div>
               <div className="flex flex-col gap-0.5">
                 {[
-                  { to: "/analytics", label: "Statistics & Flow", Icon: BarChart3, slug: "analytics" },
-                  { to: "/invoices/new", label: "New Invoice", Icon: FilePlus2, slug: "invoices" },
-                  { to: "/invoices", label: "Invoices", Icon: Receipt, slug: "invoices" },
-                  { to: "/downloads", label: "Downloads", Icon: History, slug: "downloads" },
+                  { to: "/invoices/new", label: "New Invoice", Icon: FilePlus2 },
+                  { to: "/invoices", label: "Invoices", Icon: Receipt },
+                  { to: "/analytics", label: "Statistics", Icon: BarChart3 },
                 ].map((l) => (
                   <Link
                     key={l.to}
@@ -97,7 +117,19 @@ export function ErpShell({
               </div>
             ))}
           </nav>
-          <div className="border-t border-sidebar-border p-3">
+          <div className="space-y-1 border-t border-sidebar-border p-3">
+            <Link
+              to="/settings"
+              className={cn(
+                "flex items-center gap-2 rounded-md px-3 py-2 text-sm transition-colors",
+                path === "/settings"
+                  ? "bg-sidebar-primary text-sidebar-primary-foreground"
+                  : "text-sidebar-foreground hover:bg-sidebar-accent hover:text-sidebar-accent-foreground",
+              )}
+            >
+              <Settings className="h-4 w-4 shrink-0" />
+              Settings
+            </Link>
             <a
               href={`https://docs.google.com/spreadsheets/d/${SPREADSHEET_ID}/edit`}
               target="_blank"
@@ -107,8 +139,17 @@ export function ErpShell({
               <ExternalLink className="h-3.5 w-3.5" />
               Open Sheet
             </a>
+            <button
+              type="button"
+              onClick={handleSignOut}
+              className="flex w-full items-center gap-2 rounded-md px-3 py-2 text-xs text-muted-foreground hover:bg-sidebar-accent hover:text-sidebar-accent-foreground"
+            >
+              <LogOut className="h-3.5 w-3.5" />
+              Sign out
+            </button>
           </div>
         </aside>
+
 
         <main className="flex-1">
           <header className="sticky top-0 z-10 border-b border-border bg-background/80 backdrop-blur">

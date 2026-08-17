@@ -14,7 +14,7 @@ const salesQuery = queryOptions({
   staleTime: 15_000,
 });
 
-export const Route = createFileRoute("/invoices/")({
+export const Route = createFileRoute("/_authenticated/invoices/")({
   head: () => ({
     meta: [
       { title: "Invoice History — Focus Lady Bra ERP" },

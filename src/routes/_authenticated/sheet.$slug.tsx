@@ -18,7 +18,7 @@ const sheetQuery = (sheet: string) =>
   });
 
 
-export const Route = createFileRoute("/sheet/$slug")({
+export const Route = createFileRoute("/_authenticated/sheet/$slug")({
   head: ({ params }) => {
     const mod = getModuleBySlug(params.slug);
     const title = mod ? `${mod.label} — Focus Lady Bra ERP` : "Focus Lady Bra ERP";
