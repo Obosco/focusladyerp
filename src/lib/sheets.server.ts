@@ -54,10 +54,99 @@ export async function appendRows(range: string, values: SheetValues) {
   );
 }
 
+export async function updateRange(range: string, values: SheetValues) {
+  await call(
+    `${GATEWAY}/spreadsheets/${SPREADSHEET_ID}/values/${range}?valueInputOption=USER_ENTERED`,
+    { method: "PUT", body: JSON.stringify({ values }) },
+  );
+}
+
+/* ---------------------------------- settings --------------------------------- */
+
+export type ErpSettings = {
+  defaultGstPercent: number;
+  reorderThreshold: number;
+  whatsappCountryCode: string;
+};
+
+const SETTINGS_DEFAULTS: ErpSettings = {
+  defaultGstPercent: 0,
+  reorderThreshold: 5,
+  whatsappCountryCode: "91",
+};
+
+export async function readSettings(): Promise<ErpSettings> {
+  const rows = await readRange("Settings!A2:B50");
+  const map = new Map(rows.map((r) => [(r[0] ?? "").trim(), (r[1] ?? "").trim()]));
+  const num = (k: string, d: number) => {
+    const n = parseFloat(map.get(k) ?? "");
+    return isFinite(n) ? n : d;
+  };
+  return {
+    defaultGstPercent: num("default_gst_percent", SETTINGS_DEFAULTS.defaultGstPercent),
+    reorderThreshold: num("reorder_threshold", SETTINGS_DEFAULTS.reorderThreshold),
+    whatsappCountryCode:
+      map.get("whatsapp_country_code") || SETTINGS_DEFAULTS.whatsappCountryCode,
+  };
+}
+
+export async function writeSettings(s: ErpSettings) {
+  await updateRange("Settings!A2:B4", [
+    ["default_gst_percent", String(s.defaultGstPercent)],
+    ["reorder_threshold", String(s.reorderThreshold)],
+    ["whatsapp_country_code", s.whatsappCountryCode],
+  ]);
+  return s;
+}
+
+/* ---------------------------------- masters ---------------------------------- */
+
+export type ProductInput = {
+  name: string;
+  category?: string;
+  cost?: number;
+  price?: number;
+  size?: string;
+  color?: string;
+  gstPercent?: number;
+};
+
+export async function createProduct(p: ProductInput) {
+  const rows = await readRange("Products!A2:A2000");
+  const id = `P-${String(rows.filter((r) => (r[0] ?? "").trim()).length + 1).padStart(4, "0")}`;
+  await appendRows("Products!A:I", [
+    [
+      id,
+      p.name,
+      p.category ?? "",
+      "0",
+      String(p.cost ?? 0),
+      String(p.price ?? 0),
+      p.size ?? "",
+      p.color ?? "",
+      String(p.gstPercent ?? 0),
+    ],
+  ]);
+  return { id, ...p };
+}
+
+export type CustomerInput = { name: string; phone?: string };
+
+export async function createCustomer(c: CustomerInput) {
+  const rows = await readRange("Customers!A2:A2000");
+  const id = `C-${String(rows.filter((r) => (r[0] ?? "").trim()).length + 1).padStart(4, "0")}`;
+  await appendRows("Customers!A:D", [[id, c.name, c.phone ?? "", "0"]]);
+  return { id, ...c };
+}
+
+/* ---------------------------------- invoices --------------------------------- */
+
 export type InvoiceItemInput = {
   product: string;
   qty: number;
   rate: number;
+  size?: string;
+  color?: string;
 };
 
 export type InvoiceInput = {
@@ -71,7 +160,6 @@ export type InvoiceInput = {
   mode: string;
   notes: string;
   signer: string;
-  signature: string; // data URL, may be empty
 };
 
 export function computeInvoice(input: InvoiceInput) {
@@ -101,12 +189,12 @@ export async function saveInvoice(input: InvoiceInput) {
       status,
       input.notes ?? "",
       input.signer ?? "",
-      (input.signature ?? "").slice(0, 45000),
+      "",
     ],
   ]);
 
   await appendRows(
-    "'Sale Items'!A:G",
+    "'Sale Items'!A:I",
     input.items.map((i) => [
       input.invoice,
       input.date,
@@ -115,13 +203,21 @@ export async function saveInvoice(input: InvoiceInput) {
       String(i.qty),
       String(i.rate),
       String(+(i.qty * i.rate).toFixed(2)),
+      i.size ?? "",
+      i.color ?? "",
     ]),
   );
 
+  // Stock out — one row per variant sold.
   await appendRows(
-    "Stock!A:D",
-    input.items.map((i) => [i.product, "", String(i.qty), ""]),
+    "Stock!A:F",
+    input.items.map((i) => [i.product, "", String(i.qty), "", i.size ?? "", i.color ?? ""]),
   );
+
+  // Customer ledger: invoice debits the customer, payment credits it.
+  await appendRows("'Customer Ledger'!A:E", [
+    [input.date, input.customer, String(total), String(paid), String(due)],
+  ]);
 
   if (paid > 0) {
     await appendRows("'Daily Collection'!A:E", [
@@ -136,7 +232,62 @@ export async function nextInvoiceNumber(date: string) {
   const rows = await readRange("Sales!A2:A2000");
   const ymd = (date || new Date().toISOString().slice(0, 10)).replace(/-/g, "");
   const prefix = `FLB-${ymd}-`;
-  const n =
-    rows.filter((r) => (r[0] ?? "").startsWith(prefix)).length + 1;
+  const n = rows.filter((r) => (r[0] ?? "").startsWith(prefix)).length + 1;
   return `${prefix}${String(n).padStart(3, "0")}`;
 }
+
+/* ---------------------------------- returns ---------------------------------- */
+
+export type ReturnInput = {
+  date: string;
+  invoice: string;
+  customer: string;
+  type: "Return" | "Exchange";
+  reason?: string;
+  items: { product: string; qty: number; rate: number; size?: string; color?: string }[];
+};
+
+export async function saveReturn(input: ReturnInput) {
+  const existing = await readRange("Returns!A2:A2000");
+  const id = `RET-${String(existing.filter((r) => (r[0] ?? "").trim()).length + 1).padStart(4, "0")}`;
+  const amount = input.items.reduce((a, i) => a + i.qty * i.rate, 0);
+
+  await appendRows(
+    "Returns!A:K",
+    input.items.map((i) => [
+      id,
+      input.date,
+      input.invoice,
+      input.customer,
+      i.product,
+      i.size ?? "",
+      i.color ?? "",
+      String(i.qty),
+      String(+(i.qty * i.rate).toFixed(2)),
+      input.type,
+      input.reason ?? "",
+    ]),
+  );
+
+  // Returned goods go back into stock (exchanges are re-issued on a new invoice).
+  if (input.type === "Return") {
+    await appendRows(
+      "Stock!A:F",
+      input.items.map((i) => [
+        i.product,
+        String(i.qty),
+        "",
+        "",
+        i.size ?? "",
+        i.color ?? "",
+      ]),
+    );
+    // Credit the customer's ledger by the returned amount.
+    await appendRows("'Customer Ledger'!A:E", [
+      [input.date, input.customer, "0", String(+amount.toFixed(2)), `Return ${id}`],
+    ]);
+  }
+
+  return { id, amount: +amount.toFixed(2) };
+}
+
