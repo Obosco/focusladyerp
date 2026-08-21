@@ -20,6 +20,36 @@ function loadServerEnv(): Plugin {
   };
 }
 
+// Electron ships a plain Node server (.output/server/index.mjs); Vercel wants the
+// Build Output API in .vercel/output. VERCEL=1 is set by the Vercel build image, and
+// NITRO_PRESET overrides both for one-off builds.
+const nitroPreset = process.env.NITRO_PRESET || (process.env.VERCEL ? "vercel" : "node-server");
+
+// Nitro writes .vercel/output/config.json itself, which makes `headers` in vercel.json
+// dead config — the Build Output API routes win. These entries are merged in ahead of
+// Nitro's own routes; `continue: true` means they only decorate the response and let
+// routing fall through to the filesystem check and then the SSR function.
+const vercelRoutes: { src: string; continue: boolean; headers: Record<string, string> }[] = [
+  {
+    src: "/(.*)",
+    continue: true,
+    headers: {
+      "x-content-type-options": "nosniff",
+      "x-frame-options": "SAMEORIGIN",
+      "referrer-policy": "strict-origin-when-cross-origin",
+      "permissions-policy": "camera=(), microphone=(), geolocation=(), interest-cohort=()",
+      "strict-transport-security": "max-age=31536000; includeSubDomains",
+    },
+  },
+  {
+    // The worker script must always be revalidated, otherwise a stale sw.js keeps
+    // serving an old app shell long after a deploy.
+    src: "/(sw\\.js|manifest\\.webmanifest)",
+    continue: true,
+    headers: { "cache-control": "public, max-age=0, must-revalidate" },
+  },
+];
+
 export default defineConfig(({ command }) => ({
   plugins: [
     loadServerEnv(),
@@ -28,9 +58,9 @@ export default defineConfig(({ command }) => ({
     // server.entry redirects TanStack Start's bundled server entry to
     // src/server.ts (our SSR error wrapper). nitro/vite builds from this.
     tanstackStart({ server: { entry: "server" } }),
-    // node-server preset: .output/server/index.mjs runs under plain Node,
-    // which is what electron.cjs spawns (listens on PORT, default 3000).
-    ...(command === "build" ? [nitro({ preset: "node-server" })] : []),
+    ...(command === "build"
+      ? [nitro({ preset: nitroPreset, vercel: { config: { version: 3, routes: vercelRoutes } } })]
+      : []),
     viteReact(),
   ],
   css: { transformer: "lightningcss" },

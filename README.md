@@ -1550,9 +1550,11 @@ This design gives Focus Lady Bra ERP a complete cloud-based business management 
 
 Add more futures downloading options pdf , print options, customdate filter ,Digital signature support, autofile name invoice also dowload history,
 
-Google Sheets access uses a Google Cloud service account (JSON key referenced by
-`GOOGLE_SERVICE_ACCOUNT_FILE` in `.env`). The spreadsheet must be shared with the
-service account email as Editor.
+Google Sheets access uses a Google Cloud service account. Point
+`GOOGLE_SERVICE_ACCOUNT_FILE` at the JSON key on disk for local development, or set
+`GOOGLE_SERVICE_ACCOUNT_JSON` to the key itself (raw JSON or base64) on hosts with no
+filesystem, such as Vercel. The spreadsheet must be shared with the service account
+email as Editor.
 
 ## Development
 
@@ -1564,3 +1566,79 @@ cd <repository-name>
 npm i
 npm run dev
 ```
+
+## Deploying to Vercel
+
+`vercel.json` pins the install and build commands; everything else is inferred.
+
+```sh
+npm i -g vercel
+vercel link
+vercel --prod
+```
+
+Set these in **Project Settings → Environment Variables** before the first deploy.
+The `VITE_*` values are inlined into the browser bundle at build time, so they must be
+available to the Build step, not just the runtime:
+
+| Variable | Notes |
+| --- | --- |
+| `VITE_SUPABASE_URL`, `SUPABASE_URL` | Same value; the second is what SSR reads. |
+| `VITE_SUPABASE_PUBLISHABLE_KEY`, `SUPABASE_PUBLISHABLE_KEY` | Same value. |
+| `VITE_SUPABASE_PROJECT_ID`, `SUPABASE_PROJECT_ID` | Same value. |
+| `GOOGLE_SERVICE_ACCOUNT_JSON` | Service account key. `base64 -i key.json` avoids newline mangling. |
+| `SUPABASE_SERVICE_ROLE_KEY` | Optional — only for server code that bypasses RLS. |
+
+See `.env.example` for the full list.
+
+### How the build resolves
+
+`vite.config.ts` picks the Nitro preset from the environment: `vercel` when `VERCEL=1`
+is set (or `NITRO_PRESET=vercel`), otherwise `node-server` — the plain Node output that
+`electron.cjs` spawns for the desktop build. So `npm run build` still produces
+`.output/` locally, and Vercel gets `.vercel/output/` (Build Output API v3) with the
+SSR handler as a Node 22 function and `/assets/*` served immutably from the CDN.
+
+Because Nitro writes `.vercel/output/config.json` itself, a `headers` block in
+`vercel.json` would be ignored. Response headers are declared in `vite.config.ts`
+instead and merged into that file.
+
+## Progressive Web App
+
+The app installs to the desktop and home screen and runs standalone.
+
+- `public/manifest.webmanifest` — name, theme, icon set, and shortcuts to New Invoice,
+  Invoices and Statistics.
+- `public/sw.js` — the service worker. Hashed `/assets/*` bundles are cache-first, so
+  repeat launches render without touching the network. Navigations are network-first,
+  falling back to the last-seen page and then `public/offline.html`; HTML is never
+  served stale, because a stale document can reference asset hashes a newer deploy no
+  longer has. Server function calls (`/_serverFn/*`) and Supabase traffic are never
+  cached.
+- `src/lib/pwa.ts` — registers the worker after `load`, raises a toast offering a reload
+  when a new version has been installed, and shows the install prompt.
+
+Chrome never shows an install banner on desktop by itself; it only puts a small icon in
+the omnibox. So the app handles `beforeinstallprompt` and shows its own toast with an
+**Install** button. The event is captured by an inline script in the document head
+(`src/routes/__root.tsx`) because on a repeat visit Chrome can fire it before React
+hydrates, and it is not replayed.
+
+The prompt does not appear when the app is already installed, when the user previously
+chose *Not now* (cleared by removing the `flb-erp-install-dismissed` key in
+localStorage), or in Safari and on iOS — WebKit never fires the event, so installing
+there is done manually through **Share → Add to Home Screen**.
+
+Icons are generated from `public/favicon.ico`. To regenerate after a logo change:
+
+```sh
+sips -s format png -z 192 192 public/favicon.ico --out public/icon-192.png
+sips -s format png -z 512 512 public/favicon.ico --out public/icon-512.png
+sips -s format png -z 384 384 public/favicon.ico --out /tmp/mask.png
+sips --padToHeightWidth 512 512 --padColor FFFFFF /tmp/mask.png --out public/icon-maskable-512.png
+sips -s format png -z 176 176 public/favicon.ico --out /tmp/apple.png
+sips --padToHeightWidth 180 180 --padColor FFFFFF /tmp/apple.png --out public/apple-touch-icon.png
+```
+
+Bump `VERSION` in `public/sw.js` if the caching strategy itself changes; hashed asset
+names already handle ordinary content updates.

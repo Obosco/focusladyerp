@@ -1,0 +1,15 @@
+# Nothing here is needed to build or run the app on Vercel.
+.output
+.vercel
+.tanstack
+.wrangler
+release
+electron.cjs
+supabase
+
+# Never upload credentials — these belong in Vercel environment variables.
+.env
+.env.*
+rational-iris-*.json
+service-account*.json
+*.json.key

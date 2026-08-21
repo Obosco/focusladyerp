@@ -107,5 +107,8 @@
       "artifactName": "FocusLadyERP-Setup-${version}.${ext}"
     }
   },
-  "version": "1.0.0"
+  "version": "1.0.0",
+  "engines": {
+    "node": ">=22.12.0"
+  }
 }

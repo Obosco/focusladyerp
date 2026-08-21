@@ -10,15 +10,37 @@ type ServiceAccount = { client_email: string; private_key: string; token_uri: st
 
 let serviceAccount: ServiceAccount | undefined;
 
+// Serverless hosts have no key file on disk, so the credential can also arrive inline as
+// an env var — raw JSON or base64 of it. GOOGLE_SERVICE_ACCOUNT_FILE stays the local path.
+function readServiceAccountSource(): string {
+  const inline = process.env["GOOGLE_SERVICE_ACCOUNT_JSON"];
+  if (inline) {
+    const trimmed = inline.trim();
+    return trimmed.startsWith("{") ? trimmed : Buffer.from(trimmed, "base64").toString("utf8");
+  }
+
+  const file = process.env["GOOGLE_SERVICE_ACCOUNT_FILE"];
+  if (file) return readFileSync(resolve(process.cwd(), file), "utf8");
+
+  throw new Error(
+    "Google Sheets is not configured. Set GOOGLE_SERVICE_ACCOUNT_JSON to the service account key (JSON or base64), or GOOGLE_SERVICE_ACCOUNT_FILE to its path on disk.",
+  );
+}
+
 function loadServiceAccount(): ServiceAccount {
   if (!serviceAccount) {
-    const file = process.env["GOOGLE_SERVICE_ACCOUNT_FILE"];
-    if (!file) {
+    const parsed = JSON.parse(readServiceAccountSource()) as ServiceAccount;
+    if (!parsed.client_email || !parsed.private_key) {
       throw new Error(
-        "Google Sheets is not configured. Set GOOGLE_SERVICE_ACCOUNT_FILE in .env to the path of the service account JSON key.",
+        "Google service account key is missing client_email or private_key. Check the credential value.",
       );
     }
-    serviceAccount = JSON.parse(readFileSync(resolve(process.cwd(), file), "utf8")) as ServiceAccount;
+    // Env vars round-trip newlines as the two characters \n; PEM parsing needs real ones.
+    serviceAccount = {
+      ...parsed,
+      token_uri: parsed.token_uri || "https://oauth2.googleapis.com/token",
+      private_key: parsed.private_key.replace(/\\n/g, "\n"),
+    };
   }
   return serviceAccount;
 }

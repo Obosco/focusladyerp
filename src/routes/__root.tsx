@@ -7,10 +7,11 @@ import {
   HeadContent,
   Scripts,
 } from "@tanstack/react-router";
-import { type ReactNode } from "react";
+import { useEffect, type ReactNode } from "react";
 
 import appCss from "../styles.css?url";
 import { Toaster } from "@/components/ui/sonner";
+import { registerServiceWorker, watchInstallPrompt } from "@/lib/pwa";
 
 
 function NotFoundComponent() {
@@ -82,6 +83,12 @@ export const Route = createRootRouteWithContext<{ queryClient: QueryClient }>()(
           "Cloud ERP for Focus Lady Bra — sales, stock, HR, payroll and accounts synced live with Google Sheets.",
       },
       { name: "author", content: "Focus Lady Bra" },
+      { name: "theme-color", content: "#ffffff" },
+      { name: "application-name", content: "Focus Lady Bra ERP" },
+      { name: "mobile-web-app-capable", content: "yes" },
+      { name: "apple-mobile-web-app-capable", content: "yes" },
+      { name: "apple-mobile-web-app-title", content: "FLB ERP" },
+      { name: "apple-mobile-web-app-status-bar-style", content: "default" },
       { property: "og:title", content: "Focus Lady Bra ERP" },
       {
         property: "og:description",
@@ -93,6 +100,18 @@ export const Route = createRootRouteWithContext<{ queryClient: QueryClient }>()(
     links: [
       { rel: "stylesheet", href: appCss },
       { rel: "icon", href: "/favicon.ico", type: "image/x-icon" },
+      { rel: "icon", href: "/icon-192.png", type: "image/png", sizes: "192x192" },
+      { rel: "icon", href: "/icon-512.png", type: "image/png", sizes: "512x512" },
+      { rel: "apple-touch-icon", href: "/apple-touch-icon.png", sizes: "180x180" },
+      { rel: "manifest", href: "/manifest.webmanifest" },
+    ],
+    // beforeinstallprompt can fire before React hydrates on a repeat visit, and it is
+    // not replayed. Stash it from the document head so watchInstallPrompt() can pick it
+    // up whenever it mounts.
+    scripts: [
+      {
+        children: `window.__flbInstallEvent=null;window.addEventListener("beforeinstallprompt",function(e){e.preventDefault();window.__flbInstallEvent=e;window.dispatchEvent(new Event("flb:installable"))});`,
+      },
     ],
   }),
 
@@ -118,6 +137,11 @@ function RootShell({ children }: { children: ReactNode }) {
 
 function RootComponent() {
   const { queryClient } = Route.useRouteContext();
+
+  useEffect(() => {
+    registerServiceWorker();
+    watchInstallPrompt();
+  }, []);
 
   return (
     <QueryClientProvider client={queryClient}>
