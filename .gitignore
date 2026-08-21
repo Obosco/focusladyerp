@@ -32,3 +32,13 @@ dist-ssr
 *.sw?
 
 release/
+
+# Google service account credentials — never commit
+*.json.key
+rational-iris-*.json
+service-account*.json
+
+# Environment secrets — never commit
+.env
+.env.*
+!.env.example
