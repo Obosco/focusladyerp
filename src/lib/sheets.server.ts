@@ -1,28 +1,71 @@
-// Server-only Google Sheets gateway helpers.
+// Server-only Google Sheets helpers — direct Google API via service account.
+import { readFileSync } from "node:fs";
+import { resolve } from "node:path";
+import { createSign } from "node:crypto";
 import { SPREADSHEET_ID } from "./erp-modules";
 
-const GATEWAY = "https://connector-gateway.lovable.dev/google_sheets/v4";
+const GATEWAY = "https://sheets.googleapis.com/v4";
 
-export function authHeaders() {
-  const lovableKey = process.env["LOVABLE_API_KEY"];
-  const connKey = process.env["GOOGLE_SHEETS_API_KEY"];
-  if (!lovableKey || !connKey) {
-    throw new Error(
-      "Google Sheets connector is not configured. Ensure LOVABLE_API_KEY and GOOGLE_SHEETS_API_KEY are set.",
-    );
+type ServiceAccount = { client_email: string; private_key: string; token_uri: string };
+
+let serviceAccount: ServiceAccount | undefined;
+
+function loadServiceAccount(): ServiceAccount {
+  if (!serviceAccount) {
+    const file = process.env["GOOGLE_SERVICE_ACCOUNT_FILE"];
+    if (!file) {
+      throw new Error(
+        "Google Sheets is not configured. Set GOOGLE_SERVICE_ACCOUNT_FILE in .env to the path of the service account JSON key.",
+      );
+    }
+    serviceAccount = JSON.parse(readFileSync(resolve(process.cwd(), file), "utf8")) as ServiceAccount;
   }
-  return {
-    Authorization: `Bearer ${lovableKey}`,
-    "X-Connection-Api-Key": connKey,
-    Accept: "application/json",
-    "Content-Type": "application/json",
-  };
+  return serviceAccount;
+}
+
+let cachedToken: { value: string; expiresAt: number } | undefined;
+
+async function accessToken(): Promise<string> {
+  if (cachedToken && Date.now() < cachedToken.expiresAt - 60_000) return cachedToken.value;
+  const sa = loadServiceAccount();
+  const b64 = (o: object) => Buffer.from(JSON.stringify(o)).toString("base64url");
+  const now = Math.floor(Date.now() / 1000);
+  const unsigned = `${b64({ alg: "RS256", typ: "JWT" })}.${b64({
+    iss: sa.client_email,
+    scope: "https://www.googleapis.com/auth/spreadsheets",
+    aud: sa.token_uri,
+    iat: now,
+    exp: now + 3600,
+  })}`;
+  const signature = createSign("RSA-SHA256").update(unsigned).sign(sa.private_key, "base64url");
+  const res = await fetch(sa.token_uri, {
+    method: "POST",
+    headers: { "Content-Type": "application/x-www-form-urlencoded" },
+    body: new URLSearchParams({
+      grant_type: "urn:ietf:params:oauth:grant-type:jwt-bearer",
+      assertion: `${unsigned}.${signature}`,
+    }),
+  });
+  const data = (await res.json()) as { access_token?: string; expires_in?: number };
+  if (!res.ok || !data.access_token) {
+    throw new Error(`Google auth failed (${res.status}): ${JSON.stringify(data).slice(0, 300)}`);
+  }
+  cachedToken = { value: data.access_token, expiresAt: Date.now() + (data.expires_in ?? 3600) * 1000 };
+  return cachedToken.value;
 }
 
 export type SheetValues = string[][];
 
 async function call(url: string, init?: RequestInit) {
-  const res = await fetch(url, { ...init, headers: authHeaders() });
+  const token = await accessToken();
+  const res = await fetch(url, {
+    ...init,
+    headers: {
+      Authorization: `Bearer ${token}`,
+      Accept: "application/json",
+      "Content-Type": "application/json",
+    },
+  });
   const body = await res.text();
   if (!res.ok) throw new Error(`Sheets ${res.status}: ${body.slice(0, 300)}`);
   return body ? JSON.parse(body) : {};
@@ -160,6 +203,7 @@ export type InvoiceInput = {
   mode: string;
   notes: string;
   signer: string;
+  signature: string;
 };
 
 export function computeInvoice(input: InvoiceInput) {
@@ -189,7 +233,7 @@ export async function saveInvoice(input: InvoiceInput) {
       status,
       input.notes ?? "",
       input.signer ?? "",
-      "",
+      input.signature ?? "",
     ],
   ]);
 

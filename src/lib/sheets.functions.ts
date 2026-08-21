@@ -20,7 +20,7 @@ import {
 
 export const getSheetRange = createServerFn({ method: "GET" })
   .middleware([requireSupabaseAuth])
-  .inputValidator((data: { range: string }) => {
+  .validator((data: { range: string }) => {
     if (!data || typeof data.range !== "string" || !data.range) {
       throw new Error("range is required");
     }
@@ -30,7 +30,7 @@ export const getSheetRange = createServerFn({ method: "GET" })
 
 export const getSheetsBatch = createServerFn({ method: "GET" })
   .middleware([requireSupabaseAuth])
-  .inputValidator((data: { ranges: string[] }) => {
+  .validator((data: { ranges: string[] }) => {
     if (!data || !Array.isArray(data.ranges) || data.ranges.length === 0) {
       throw new Error("ranges is required");
     }
@@ -40,12 +40,12 @@ export const getSheetsBatch = createServerFn({ method: "GET" })
 
 export const getNextInvoiceNumber = createServerFn({ method: "GET" })
   .middleware([requireSupabaseAuth])
-  .inputValidator((data: { date: string }) => data ?? { date: "" })
+  .validator((data: { date: string }) => data ?? { date: "" })
   .handler(async ({ data }) => ({ invoice: await nextInvoiceNumber(data.date) }));
 
 export const createInvoice = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
-  .inputValidator((data: InvoiceInput) => {
+  .validator((data: InvoiceInput) => {
     if (!data || !data.customer) throw new Error("Customer is required");
     if (!Array.isArray(data.items) || data.items.length === 0) {
       throw new Error("At least one line item is required");
@@ -60,7 +60,7 @@ export const getErpSettings = createServerFn({ method: "GET" })
 
 export const saveErpSettings = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
-  .inputValidator((data: ErpSettings) => {
+  .validator((data: ErpSettings) => {
     if (!data) throw new Error("Settings are required");
     return data;
   })
@@ -79,7 +79,7 @@ export const saveErpSettings = createServerFn({ method: "POST" })
 
 export const addProduct = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
-  .inputValidator((data: ProductInput) => {
+  .validator((data: ProductInput) => {
     if (!data?.name?.trim()) throw new Error("Product name is required");
     return data;
   })
@@ -87,7 +87,7 @@ export const addProduct = createServerFn({ method: "POST" })
 
 export const addCustomer = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
-  .inputValidator((data: CustomerInput) => {
+  .validator((data: CustomerInput) => {
     if (!data?.name?.trim()) throw new Error("Customer name is required");
     return data;
   })
@@ -95,7 +95,7 @@ export const addCustomer = createServerFn({ method: "POST" })
 
 export const createReturn = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
-  .inputValidator((data: ReturnInput) => {
+  .validator((data: ReturnInput) => {
     if (!data?.invoice) throw new Error("Invoice is required");
     if (!Array.isArray(data.items) || data.items.length === 0) {
       throw new Error("At least one returned item is required");
@@ -106,7 +106,7 @@ export const createReturn = createServerFn({ method: "POST" })
 
 export const logDownload = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
-  .inputValidator(
+  .validator(
     (data: {
       type: string;
       reference: string;

@@ -1550,17 +1550,9 @@ This design gives Focus Lady Bra ERP a complete cloud-based business management 
 
 Add more futures downloading options pdf , print options, customdate filter ,Digital signature support, autofile name invoice also dowload history,
 
-This project was built with [Lovable](https://lovable.dev).
-
-**Live app**: https://focusladyerp.lovable.app
-
-## Build with Lovable
-
-Continue developing this project in the [Lovable editor](https://lovable.dev/projects/93be3103-7552-42e7-b0f3-5169aed6d4f6).
-
-- **Ship faster**: describe what you want to build and Lovable handles the code.
-- **Stay in sync**: every change made in Lovable is committed straight to this repository.
-- **Full ownership**: this code is yours. Push to `main` on GitHub and your changes sync back into Lovable, ready for your next prompt.
+Google Sheets access uses a Google Cloud service account (JSON key referenced by
+`GOOGLE_SERVICE_ACCOUNT_FILE` in `.env`). The spreadsheet must be shared with the
+service account email as Editor.
 
 ## Development
 
