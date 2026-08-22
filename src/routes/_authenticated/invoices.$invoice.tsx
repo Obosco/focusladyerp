@@ -21,7 +21,7 @@ export const Route = createFileRoute("/_authenticated/invoices/$invoice")({
       { title: `Invoice ${params.invoice} — Focus Lady Bra ERP` },
       {
         name: "description",
-        content: `Printable tax invoice ${params.invoice} with line items, GST, payment status and signature.`,
+          content: `Printable tax invoice ${params.invoice} with line items, GST, payment status.`,
       },
       { property: "og:title", content: `Invoice ${params.invoice} — Focus Lady Bra ERP` },
       {
@@ -94,8 +94,6 @@ function InvoiceView({ invoice }: { invoice: string }) {
     paid,
     due: dueAmt,
     notes: head[9] ?? "",
-    signer: head[10] ?? "",
-    signature: head[11] ?? "",
   };
 
   return (
@@ -164,18 +162,12 @@ function InvoiceView({ invoice }: { invoice: string }) {
           <p className="mt-6 text-xs text-muted-foreground">Notes: {doc.notes}</p>
         ) : null}
 
-        <div className="mt-10">
-          {doc.signature?.startsWith("data:image") ? (
-            <img
-              src={doc.signature}
-              alt={`Signature of ${doc.signer || "authorised signatory"}`}
-              className="h-16 w-40 object-contain"
-            />
-          ) : (
-            <div className="h-16" />
-          )}
-          <div className="w-40 border-t border-border pt-1 text-xs text-muted-foreground">
-            {doc.signer || "Authorised signature"}
+        <div className="mt-10 flex justify-end">
+          <div className="w-44 text-right">
+            {/* Blank physical signature area for printing. No digital signature is displayed or stored. */}
+            <div className="h-20 border border-dashed bg-white" />
+            <div className="mt-2 text-xs font-medium">For OBOSCO CLOTHING INDUSTRIES</div>
+            <div className="text-xs">Authorised Signatory</div>
           </div>
         </div>
       </div>
