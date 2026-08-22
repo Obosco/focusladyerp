@@ -7,6 +7,7 @@ import { Label } from "@/components/ui/label";
 import { Checkbox } from "@/components/ui/checkbox";
 import { toast } from "sonner";
 import { setRememberMe } from "@/lib/session";
+import InstallButton from "@/components/install-button";
 
 type Mode = "login" | "setup" | "forgot";
 
@@ -218,6 +219,10 @@ function AuthPage() {
               First install? Create the admin account
             </button>
           )}
+
+          <div className="mt-6 flex justify-center">
+            <InstallButton compact />
+          </div>
         </div>
       </div>
     </main>

@@ -4,19 +4,22 @@ import { toast } from "sonner";
 const SW_URL = "/sw.js";
 const INSTALL_DISMISSED_KEY = "flb-erp-install-dismissed";
 
-// Chrome fires this instead of showing its own banner; without a handler the only
-// affordance is the small install icon in the omnibox, which people never notice.
-type BeforeInstallPromptEvent = Event & {
+export type BeforeInstallPromptEvent = Event & {
   prompt: () => Promise<void>;
   userChoice: Promise<{ outcome: "accepted" | "dismissed" }>;
 };
 
-function isInstalled() {
+export function isInstalled() {
+  if (typeof window === "undefined") return false;
   return (
     window.matchMedia("(display-mode: standalone)").matches ||
-    // iOS Safari reports standalone mode here rather than through display-mode.
     (navigator as Navigator & { standalone?: boolean }).standalone === true
   );
+}
+
+export function isIos() {
+  if (typeof navigator === "undefined") return false;
+  return /iphone|ipad|ipod/i.test(navigator.userAgent);
 }
 
 function offerInstall(deferred: BeforeInstallPromptEvent) {
@@ -30,7 +33,6 @@ function offerInstall(deferred: BeforeInstallPromptEvent) {
       onClick: async () => {
         await deferred.prompt();
         const { outcome } = await deferred.userChoice;
-        // Only a refusal is remembered; an accepted prompt never fires again anyway.
         if (outcome === "dismissed") localStorage.setItem(INSTALL_DISMISSED_KEY, "1");
       },
     },
@@ -46,7 +48,6 @@ export function watchInstallPrompt() {
 
   const stash = window as Window & { __flbInstallEvent?: BeforeInstallPromptEvent | null };
 
-  // The head script may have caught the event already, before React hydrated.
   if (stash.__flbInstallEvent) offerInstall(stash.__flbInstallEvent);
   else
     window.addEventListener("flb:installable", () => offerInstall(stash.__flbInstallEvent!), {
@@ -59,14 +60,39 @@ export function watchInstallPrompt() {
   });
 }
 
+function collectSameOriginUrls() {
+  const urls = new Set<string>([`${location.origin}/`, location.href.split("#")[0]]);
+  for (const entry of performance.getEntriesByType("resource")) {
+    try {
+      const url = new URL(entry.name);
+      if (url.origin !== location.origin) continue;
+      if (url.pathname.startsWith("/assets/") || url.pathname.startsWith("/icon-")) {
+        urls.add(url.href);
+      }
+    } catch {
+      // ignore malformed resource names
+    }
+  }
+  return [...urls];
+}
+
+function precacheLoadedAssets() {
+  if (!("serviceWorker" in navigator)) return;
+  const send = () => {
+    navigator.serviceWorker.ready.then((registration) => {
+      registration.active?.postMessage({ type: "CACHE_URLS", urls: collectSameOriginUrls() });
+    });
+  };
+  if (document.readyState === "complete") send();
+  else window.addEventListener("load", send, { once: true });
+}
+
 function promptToReload(waiting: ServiceWorker) {
   toast("A new version is available", {
     duration: Infinity,
     action: {
       label: "Reload",
       onClick: () => {
-        // controllerchange fires once the waiting worker takes over; reload then so
-        // the fresh document is served by the new worker rather than the old one.
         navigator.serviceWorker.addEventListener(
           "controllerchange",
           () => window.location.reload(),
@@ -87,11 +113,14 @@ function watchForUpdates(registration: ServiceWorkerRegistration) {
     const installing = registration.installing;
     if (!installing) return;
     installing.addEventListener("statechange", () => {
-      // An existing controller means this is an update, not the very first install.
       if (installing.state === "installed" && navigator.serviceWorker.controller) {
         promptToReload(installing);
       }
     });
+  });
+
+  document.addEventListener("visibilitychange", () => {
+    if (document.visibilityState === "visible") void registration.update();
   });
 }
 
@@ -102,13 +131,13 @@ export function registerServiceWorker() {
   const register = () => {
     navigator.serviceWorker
       .register(SW_URL, { scope: "/" })
-      .then(watchForUpdates)
+      .then((registration) => {
+        watchForUpdates(registration);
+        precacheLoadedAssets();
+      })
       .catch((error) => console.error("[pwa] Service worker registration failed", error));
   };
 
-  // Register as early as practical so the service worker can take control quickly
-  // and serve a cached shell on subsequent visits. Use DOMContentLoaded to avoid
-  // blocking parsing of the initial document while still registering earlier than 'load'.
   if (document.readyState === "complete" || document.readyState === "interactive") register();
   else window.addEventListener("DOMContentLoaded", register, { once: true });
 }
