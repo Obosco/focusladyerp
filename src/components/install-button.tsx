@@ -1,55 +1,52 @@
 import { useEffect, useState } from "react";
+import { Download } from "lucide-react";
+import { Button } from "@/components/ui/button";
+import { isInstalled, type BeforeInstallPromptEvent } from "@/lib/pwa";
 
-// A tiny, unobtrusive install button that appears when the beforeinstallprompt event
-// is available. This complements the toast-based prompt and provides a persistent
-// visible affordance on desktop and Android Chrome.
-
-export default function InstallButton() {
-  const [deferred, setDeferred] = useState<any | null>(null);
-  const [visible, setVisible] = useState(false);
+export default function InstallButton({
+  className,
+  compact = false,
+}: {
+  className?: string;
+  compact?: boolean;
+}) {
+  const [deferred, setDeferred] = useState<BeforeInstallPromptEvent | null>(null);
 
   useEffect(() => {
-    if (typeof window === "undefined") return;
-    const stash = window as Window & { __flbInstallEvent?: any | null };
-    // If the head script already grabbed it put it on window.__flbInstallEvent
-    if (stash.__flbInstallEvent) {
-      setDeferred(stash.__flbInstallEvent);
-      setVisible(true);
-    }
+    if (typeof window === "undefined" || isInstalled()) return;
+    const stash = window as Window & { __flbInstallEvent?: BeforeInstallPromptEvent | null };
 
-    function onInstallable() {
-      setDeferred(stash.__flbInstallEvent);
-      setVisible(true);
-    }
+    const sync = () => {
+      if (stash.__flbInstallEvent) setDeferred(stash.__flbInstallEvent);
+    };
 
-    window.addEventListener("flb:installable", onInstallable);
-
-    window.addEventListener("appinstalled", () => {
-      setVisible(false);
-    });
-
-    return () => window.removeEventListener("flb:installable", onInstallable);
+    sync();
+    window.addEventListener("flb:installable", sync);
+    window.addEventListener("appinstalled", () => setDeferred(null));
+    return () => window.removeEventListener("flb:installable", sync);
   }, []);
 
-  if (!visible || !deferred) return null;
+  if (!deferred) return null;
 
   return (
-    <div style={{ position: "fixed", right: 16, bottom: 84, zIndex: 9999 }}>
-      <button
-        onClick={async () => {
-          try {
-            await deferred.prompt();
-            const choice = await deferred.userChoice;
-            // If dismissed, leave (the toast code handles remembering a dismissal).
-          } catch (e) {
-            // ignore
-          }
-        }}
-        aria-label="Install FocusLadyERP"
-        className="inline-flex items-center justify-center rounded-md bg-primary px-3 py-2 text-sm font-medium text-primary-foreground shadow-lg"
-      >
-        Install FocusLadyERP
-      </button>
-    </div>
+    <Button
+      type="button"
+      variant={compact ? "ghost" : "default"}
+      size="sm"
+      className={className}
+      aria-label="Install Focus Lady Bra ERP"
+      onClick={async () => {
+        try {
+          await deferred.prompt();
+          await deferred.userChoice;
+          setDeferred(null);
+        } catch {
+          // User closed the native prompt.
+        }
+      }}
+    >
+      <Download className="h-4 w-4" />
+      {compact ? "Install app" : "Install Focus Lady Bra ERP"}
+    </Button>
   );
 }

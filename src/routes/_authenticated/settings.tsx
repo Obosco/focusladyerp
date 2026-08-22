@@ -10,7 +10,9 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { toast } from "sonner";
 import { signOutClean } from "@/lib/session";
 import { useQueryClient } from "@tanstack/react-query";
-import { ExternalLink, History, RefreshCcw } from "lucide-react";
+import { Download, ExternalLink, History, RefreshCcw } from "lucide-react";
+import InstallButton from "@/components/install-button";
+import { isInstalled, isIos } from "@/lib/pwa";
 
 export const Route = createFileRoute("/_authenticated/settings")({
   head: () => ({
@@ -40,8 +42,12 @@ function SettingsPage() {
   const [isAdmin, setIsAdmin] = useState(false);
   const [password, setPassword] = useState("");
   const [busy, setBusy] = useState(false);
+  const [installed, setInstalled] = useState(false);
+  const [ios, setIos] = useState(false);
 
   useEffect(() => {
+    setInstalled(isInstalled());
+    setIos(isIos());
     supabase.auth.getUser().then(async ({ data }) => {
       if (!data.user) return;
       setEmail(data.user.email ?? "");
@@ -104,6 +110,38 @@ function SettingsPage() {
             <Button variant="outline" size="sm" onClick={signOut}>
               Sign out
             </Button>
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardHeader>
+            <CardTitle className="text-sm">Install app</CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-3 text-sm">
+            {installed ? (
+              <p className="text-muted-foreground">
+                This app is installed and opens as its own window. Repeat launches use the
+                cached shell so they start without waiting on the network.
+              </p>
+            ) : ios ? (
+              <p className="text-muted-foreground">
+                On iPhone or iPad, open the Share sheet and choose{" "}
+                <span className="font-medium text-foreground">Add to Home Screen</span>.
+              </p>
+            ) : (
+              <>
+                <p className="text-muted-foreground">
+                  Install Focus Lady Bra ERP on this computer. After that it opens like a
+                  native app — no browser chrome, and the interface loads from cache.
+                </p>
+                <InstallButton />
+              </>
+            )}
+            {!installed && ios ? (
+              <div className="flex items-center gap-2 text-xs text-muted-foreground">
+                <Download className="h-4 w-4" /> Safari → Share → Add to Home Screen
+              </div>
+            ) : null}
           </CardContent>
         </Card>
 

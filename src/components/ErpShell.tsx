@@ -14,6 +14,7 @@ import {
 import { signOutClean } from "@/lib/session";
 import { useQueryClient } from "@tanstack/react-query";
 import type { ReactNode } from "react";
+import InstallButton from "@/components/install-button";
 
 
 function NavItem({ mod, active }: { mod: ErpModule; active: boolean }) {
@@ -173,7 +174,10 @@ export function ErpShell({
                   ) : null}
                 </div>
               </div>
-              <div className="flex items-center gap-2">{actions}</div>
+              <div className="flex items-center gap-2">
+                <InstallButton compact />
+                {actions}
+              </div>
             </div>
           </header>
           <div className="p-6">{children}</div>
