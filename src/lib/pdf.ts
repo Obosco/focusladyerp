@@ -126,16 +126,21 @@ export function exportInvoicePdf(inv: InvoiceDoc) {
     doc.text(`Notes: ${inv.notes}`, 40, y + 4, { maxWidth: 280 });
   }
 
-  if (inv.signature?.startsWith("data:image")) {
-    try {
-      doc.addImage(inv.signature, "PNG", 40, y + 30, 160, 60);
-    } catch {
-      /* ignore bad signature data */
-    }
-  }
+  // No digital signature is included. Render a blank physical-signature area at the
+  // bottom-right of the invoice for printing and manual signing.
+  doc.setDrawColor(0, 0, 0);
+  const sigW = 160;
+  const sigH = 60;
+  const sigX = 400;
+  const sigY = y + 30;
+  // Draw an empty rectangle where the authorised person should sign after printing.
+  doc.setLineWidth(0.5);
+  doc.rect(sigX, sigY, sigW, sigH);
   doc.setFontSize(9);
-  doc.line(40, y + 96, 200, y + 96);
-  doc.text(inv.signer ? `Authorised: ${inv.signer}` : "Authorised signature", 40, y + 110);
+  doc.text("For OBOSCO CLOTHING INDUSTRIES", sigX + sigW / 2, sigY + sigH + 18, {
+    align: "center",
+  });
+  doc.text("Authorised Signatory", sigX + sigW / 2, sigY + sigH + 32, { align: "center" });
 
   const filename = `${safeName(inv.invoice)}-${safeName(inv.customer)}.pdf`;
   doc.save(filename);

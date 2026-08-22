@@ -8,7 +8,6 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { SignaturePad } from "@/components/SignaturePad";
 import { Plus, Trash2, Save } from "lucide-react";
 import { toast } from "sonner";
 
@@ -28,7 +27,7 @@ export const Route = createFileRoute("/_authenticated/invoices/new")({
       {
         name: "description",
         content:
-          "Create a GST sales invoice with line items, discount, payment, digital signature and instant PDF.",
+          "Create a GST sales invoice with line items, discount, payment and instant PDF.",
       },
       { property: "og:title", content: "New Invoice — Focus Lady Bra ERP" },
       {
@@ -90,8 +89,6 @@ function InvoiceForm() {
   const [paid, setPaid] = useState(0);
   const [mode, setMode] = useState("Cash");
   const [notes, setNotes] = useState("");
-  const [signer, setSigner] = useState("");
-  const [signature, setSignature] = useState("");
   const [busy, setBusy] = useState(false);
 
   const gross = lines.reduce((a, l) => a + (l.qty || 0) * (l.rate || 0), 0);
@@ -125,8 +122,6 @@ function InvoiceForm() {
           paid,
           mode,
           notes,
-          signer,
-          signature,
         },
       });
       await qc.invalidateQueries({ queryKey: ["erp"] });
@@ -246,19 +241,10 @@ function InvoiceForm() {
 
         <Card>
           <CardHeader className="pb-3">
-            <CardTitle className="text-sm">Signature & notes</CardTitle>
+            <CardTitle className="text-sm">Notes & payment</CardTitle>
           </CardHeader>
           <CardContent className="grid gap-4 sm:grid-cols-2">
             <div className="space-y-3">
-              <div className="space-y-1.5">
-                <Label htmlFor="signer">Authorised by</Label>
-                <Input
-                  id="signer"
-                  value={signer}
-                  onChange={(e) => setSigner(e.target.value)}
-                  placeholder="Name"
-                />
-              </div>
               <div className="space-y-1.5">
                 <Label htmlFor="notes">Notes</Label>
                 <Input
@@ -268,8 +254,17 @@ function InvoiceForm() {
                   placeholder="Optional note printed on the invoice"
                 />
               </div>
+              <div className="space-y-1.5">
+                <Label htmlFor="paid">Paid</Label>
+                <Input
+                  id="paid"
+                  type="number"
+                  value={paid}
+                  onChange={(e) => setPaid(Number(e.target.value))}
+                />
+              </div>
             </div>
-            <SignaturePad onChange={setSignature} />
+            <div />
           </CardContent>
         </Card>
       </div>

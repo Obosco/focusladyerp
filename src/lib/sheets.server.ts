@@ -224,8 +224,6 @@ export type InvoiceInput = {
   paid: number;
   mode: string;
   notes: string;
-  signer: string;
-  signature: string;
 };
 
 export function computeInvoice(input: InvoiceInput) {
@@ -254,8 +252,8 @@ export async function saveInvoice(input: InvoiceInput) {
       String(due),
       status,
       input.notes ?? "",
-      input.signer ?? "",
-      input.signature ?? "",
+      "",
+      "",
     ],
   ]);
 
