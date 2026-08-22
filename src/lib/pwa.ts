@@ -106,7 +106,9 @@ export function registerServiceWorker() {
       .catch((error) => console.error("[pwa] Service worker registration failed", error));
   };
 
-  // Registering after load keeps the worker's install off the critical path.
-  if (document.readyState === "complete") register();
-  else window.addEventListener("load", register, { once: true });
+  // Register as early as practical so the service worker can take control quickly
+  // and serve a cached shell on subsequent visits. Use DOMContentLoaded to avoid
+  // blocking parsing of the initial document while still registering earlier than 'load'.
+  if (document.readyState === "complete" || document.readyState === "interactive") register();
+  else window.addEventListener("DOMContentLoaded", register, { once: true });
 }

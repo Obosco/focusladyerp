@@ -28,15 +28,22 @@ const PRECACHE_URLS = [
 ];
 
 self.addEventListener("install", (event) => {
+  // Precache known static assets and attempt to fetch the app shell ('/') so the
+  // app can start instantly on repeat visits. Installation should not fail the
+  // whole worker if one resource is missing, so swallow individual errors.
   event.waitUntil(
     (async () => {
       const cache = await caches.open(SHELL_CACHE);
-      // addAll() is all-or-nothing; one 404 would abort the whole install.
       await Promise.all(
-        PRECACHE_URLS.map((url) =>
-          cache.add(new Request(url, { cache: "reload" })).catch(() => undefined),
-        ),
+        PRECACHE_URLS.map((url) => cache.add(new Request(url, { cache: "reload" })).catch(() => undefined)),
       );
+      try {
+        // Attempt to cache the app shell (root HTML). If network unavailable, skip.
+        const res = await fetch(new Request("/", { cache: "reload" }));
+        if (res && res.ok) await cache.put(new Request("/"), res.clone());
+      } catch (e) {
+        // ignore failures — offline installs will still succeed with offline.html
+      }
       await self.skipWaiting();
     })(),
   );
@@ -106,20 +113,37 @@ async function staleWhileRevalidate(event) {
   throw new Error(`Unavailable offline: ${request.url}`);
 }
 
+// For fast startup and snappy repeat visits: respond with the cached app shell
+// immediately when available, but update it from network in the background
+// (stale-while-revalidate). If nothing is cached yet, fall back to network-first.
 async function networkFirstNavigation(event) {
   const cache = await caches.open(SHELL_CACHE);
-  try {
-    const preloaded = await event.preloadResponse;
-    const response = preloaded || (await fetch(event.request));
-    if (response.ok) persist(event, SHELL_CACHE, event.request, response.clone());
-    return response;
-  } catch {
-    return (
-      (await cache.match(event.request)) ||
-      (await cache.match(OFFLINE_URL)) ||
-      new Response("Offline", { status: 503, headers: { "content-type": "text/plain" } })
-    );
+  // Try to return cached document immediately
+  const cached = await cache.match(event.request);
+  // Kick off a network fetch to update the cache in background
+  const network = (async () => {
+    try {
+      const preloaded = await event.preloadResponse;
+      const response = preloaded || (await fetch(event.request));
+      if (response && response.ok) await cache.put(event.request, response.clone());
+      return response;
+    } catch {
+      return undefined;
+    }
+  })();
+
+  if (cached) {
+    // Return cached immediately and try to update quietly
+    event.waitUntil(network);
+    return cached;
   }
+
+  // No cached response — wait for network and fall back to offline page
+  const response = await network;
+  if (response && response.ok) return response;
+  return (
+    (await cache.match(OFFLINE_URL)) || new Response("Offline", { status: 503, headers: { "content-type": "text/plain" } })
+  );
 }
 
 self.addEventListener("fetch", (event) => {
