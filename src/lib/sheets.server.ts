@@ -205,28 +205,36 @@ export async function createCustomer(c: CustomerInput) {
 
 export type InvoiceItemInput = {
   product: string;
+  hsn?: string;
   qty: number;
   rate: number;
+  gstPercent?: number;
   size?: string;
   color?: string;
 };
 
 export type InvoiceInput = {
+  mode?: "gst" | "non-gst" | "quotation";
   invoice: string;
   date: string;
+  validUntil?: string;
   customer: string;
+  customerAddress?: string;
+  vehicleNo?: string;
+  salesman?: string;
+  gstin?: string;
   items: InvoiceItemInput[];
   gstPercent: number;
   discount: number;
   paid: number;
-  mode: string;
+  paymentMode?: string;
   notes: string;
 };
 
 export function computeInvoice(input: InvoiceInput) {
   const gross = input.items.reduce((a, i) => a + i.qty * i.rate, 0);
   const subtotal = Math.max(0, gross - (input.discount || 0));
-  const gst = +(subtotal * ((input.gstPercent || 0) / 100)).toFixed(2);
+  const gst = input.mode === "non-gst" || input.mode === "quotation" ? 0 : +(subtotal * ((input.gstPercent || 0) / 100)).toFixed(2);
   const total = +(subtotal + gst).toFixed(2);
   const paid = Math.min(input.paid || 0, total);
   const due = +(total - paid).toFixed(2);
@@ -237,7 +245,7 @@ export async function saveInvoice(input: InvoiceInput) {
   const { subtotal, gst, total, paid, due } = computeInvoice(input);
   const status = due <= 0 ? "Paid" : paid > 0 ? "Partial" : "Unpaid";
 
-  await appendRows("Sales!A:L", [
+  await appendRows("Sales!A:P", [
     [
       input.invoice,
       input.date,
@@ -249,21 +257,29 @@ export async function saveInvoice(input: InvoiceInput) {
       String(due),
       status,
       input.notes ?? "",
-      "",
-      "",
+      input.vehicleNo ?? "",
+      input.salesman ?? "",
+      input.gstin ?? "",
+      input.mode ?? "gst",
+      input.customerAddress ?? "",
+      input.validUntil ?? "",
     ],
   ]);
 
   await appendRows(
-    "'Sale Items'!A:I",
+    "'Sale Items'!A:M",
     input.items.map((i) => [
       input.invoice,
       input.date,
       input.customer,
       i.product,
+      i.hsn ?? "",
       String(i.qty),
       String(i.rate),
       String(+(i.qty * i.rate).toFixed(2)),
+      String(i.gstPercent ?? input.gstPercent ?? 0),
+      String(+(i.qty * i.rate * ((i.gstPercent ?? input.gstPercent ?? 0) / 100)).toFixed(2)),
+      String(+(i.qty * i.rate * (1 + ((i.gstPercent ?? input.gstPercent ?? 0) / 100))).toFixed(2)),
       i.size ?? "",
       i.color ?? "",
     ]),
@@ -282,7 +298,7 @@ export async function saveInvoice(input: InvoiceInput) {
 
   if (paid > 0) {
     await appendRows("'Daily Collection'!A:E", [
-      [input.date, input.customer, input.invoice, String(paid), input.mode || "Cash"],
+      [input.date, input.customer, input.invoice, String(paid), input.paymentMode || "Cash"],
     ]);
   }
 

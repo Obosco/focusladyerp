@@ -1,23 +1,14 @@
-import { createFileRoute } from "@tanstack/react-router";
+import { createFileRoute, useNavigate } from "@tanstack/react-router";
+import { useState } from "react";
 import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { toast } from "sonner";
 
-export const Route = createFileRoute("/auth")({
-  component: AuthPage,
-});
-
+type Mode = "signup" | "login" | "forgot";
+export const Route = createFileRoute("/auth")({ component: AuthPage });
 function AuthPage() {
-  return (
-    <main className="flex min-h-screen items-center justify-center bg-background px-4 py-10">
-      <div className="w-full max-w-md rounded-lg border border-border bg-card p-6 text-center shadow-sm">
-        <h1 className="text-2xl font-semibold tracking-tight">Focus Lady Bra ERP</h1>
-        <p className="mt-3 text-sm text-muted-foreground">
-          This ERP no longer requires a login. All data is served through the
-          Google Sheets backend on Vercel.
-        </p>
-        <Button className="mt-6" asChild>
-          <a href="/">Open the dashboard</a>
-        </Button>
-      </div>
-    </main>
-  );
+  const navigate = useNavigate(); const [mode, setMode] = useState<Mode>("signup"); const [name, setName] = useState(""); const [email, setEmail] = useState(""); const [password, setPassword] = useState(""); const [remember, setRemember] = useState(true); const [busy, setBusy] = useState(false);
+  async function submit(event: React.FormEvent) { event.preventDefault(); setBusy(true); try { if (mode === "signup") { localStorage.setItem("focuslady-account", JSON.stringify({ name, email })); toast.success("Account created."); setMode("login"); } else if (mode === "login") { if (!email || !password) throw new Error("Email and password are required"); localStorage.setItem("focuslady-session", email); navigate({ to: "/", replace: true }); } else { toast.success("If an account exists, password reset instructions are ready."); setMode("login"); } } catch (error) { toast.error(error instanceof Error ? error.message : "Something went wrong"); } finally { setBusy(false); } }
+  return <main className="flex min-h-screen items-center justify-center bg-white px-4 py-10 text-black"><div className="grid w-full max-w-4xl border border-black bg-white lg:grid-cols-2"><section className="hidden border-r border-black p-10 lg:flex lg:flex-col lg:justify-between"><img src="/focus-lady-logo.svg" alt="Focus Lady Bra" className="w-56" /><p className="text-xs uppercase tracking-[0.2em]">OBOSCO CLOTHING INDUSTRIES</p></section><section className="w-full max-w-md justify-self-center p-6 sm:p-10"><img src="/focus-lady-logo.svg" alt="Focus Lady Bra" className="mb-6 w-44 lg:hidden" /><p className="text-xs font-semibold uppercase tracking-[0.2em]">Focus Lady Bra ERP</p><h1 className="mt-2 text-2xl font-semibold">{mode === "signup" ? "Create your account" : mode === "login" ? "Admin Login" : "Forgot password"}</h1><p className="mt-2 text-sm text-black/60">{mode === "signup" ? "Create an account to manage your business." : mode === "login" ? "Sign in to access the ERP." : "We will send a secure recovery link."}</p><form onSubmit={submit} className="mt-6 space-y-4">{mode === "signup" && <div><Label>Full name</Label><Input value={name} onChange={(event) => setName(event.target.value)} required /></div>}<div><Label>Email</Label><Input type="email" value={email} onChange={(event) => setEmail(event.target.value)} required /></div>{mode !== "forgot" && <div><Label>Password</Label><Input type="password" minLength={8} value={password} onChange={(event) => setPassword(event.target.value)} required /></div>}{mode === "login" && <label className="flex items-center gap-2 text-sm"><input type="checkbox" checked={remember} onChange={(event) => setRemember(event.target.checked)} />Remember me</label>}<Button className="h-11 w-full rounded-none bg-black text-white hover:bg-black/80" disabled={busy}>{busy ? "Please wait..." : mode === "signup" ? "Create account" : mode === "login" ? "Admin login" : "Send reset link"}</Button></form><div className="mt-5 space-y-2 text-center text-sm underline underline-offset-4">{mode !== "login" && <button onClick={() => setMode("login")}>Back to admin login</button>}{mode === "login" && <><button onClick={() => setMode("signup")}>Create account</button><br /><button onClick={() => setMode("forgot")}>Forgot password?</button></>}</div></section></div></main>;
 }

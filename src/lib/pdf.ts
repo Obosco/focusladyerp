@@ -73,7 +73,7 @@ const money = (n: number) =>
   n.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 
 export function exportInvoicePdf(inv: InvoiceDoc) {
-  const doc = new jsPDF({ unit: "pt", format: "a4" });
+  const doc = new jsPDF({ orientation: "landscape", unit: "pt", format: "a5" });
   doc.setFontSize(18);
   doc.text("FOCUS LADY BRA", 40, 50);
   doc.setFontSize(10);
