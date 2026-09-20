@@ -343,7 +343,7 @@ function AnalyticsContent() {
               setFrom(e.target.value);
               setPreset("custom");
             }}
-            className="w-[9.5rem]"
+            className="w-38"
             aria-label="From date"
           />
           <span className="text-xs text-muted-foreground">to</span>
@@ -354,7 +354,7 @@ function AnalyticsContent() {
               setTo(e.target.value);
               setPreset("custom");
             }}
-            className="w-[9.5rem]"
+            className="w-38"
             aria-label="To date"
           />
         </div>
@@ -577,11 +577,11 @@ function ChartCard({
       </CardHeader>
       <CardContent>
         {empty ? (
-          <div className="flex h-[260px] items-center justify-center text-sm text-muted-foreground">
+          <div className="flex h-65 items-center justify-center text-sm text-muted-foreground">
             No data in this period.
           </div>
         ) : (
-          <div className="h-[260px] w-full">
+          <div className="h-65 w-full">
             <ResponsiveContainer width="100%" height="100%">
               {children}
             </ResponsiveContainer>

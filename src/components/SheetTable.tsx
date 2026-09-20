@@ -162,7 +162,7 @@ export function SheetTable({
                 type="date"
                 value={from}
                 onChange={(e) => setFrom(e.target.value)}
-                className="w-[9.5rem]"
+                className="w-38"
                 aria-label="From date"
               />
               <span className="text-xs text-muted-foreground">to</span>
@@ -170,7 +170,7 @@ export function SheetTable({
                 type="date"
                 value={to}
                 onChange={(e) => setTo(e.target.value)}
-                className="w-[9.5rem]"
+                className="w-38"
                 aria-label="To date"
               />
               {from || to ? (
@@ -289,7 +289,7 @@ export function SheetTable({
                     className="border-t border-border transition-colors hover:bg-muted/30"
                   >
                     {headers.map((_, ci) => (
-                      <td key={ci} className="max-w-[22rem] truncate px-4 py-2.5 align-top">
+                      <td key={ci} className="max-w-88 truncate px-4 py-2.5 align-top">
                         {/signature|sign/i.test(headers[ci] ?? "") && row[ci]
                           ? "Signed"
                           : row[ci] ?? ""}

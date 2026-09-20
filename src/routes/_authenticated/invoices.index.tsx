@@ -111,7 +111,7 @@ function InvoiceList() {
           type="date"
           value={from}
           onChange={(e) => setFrom(e.target.value)}
-          className="w-[9.5rem]"
+          className="w-38"
           aria-label="From date"
         />
         <span className="text-xs text-muted-foreground">to</span>
@@ -119,7 +119,7 @@ function InvoiceList() {
           type="date"
           value={to}
           onChange={(e) => setTo(e.target.value)}
-          className="w-[9.5rem]"
+          className="w-38"
           aria-label="To date"
         />
         <Button
