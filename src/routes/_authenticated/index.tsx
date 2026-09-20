@@ -15,6 +15,7 @@ const KPI_RANGES = [
   "Purchases!A2:F1000",
   "Expenses!A2:C1000",
   "Products!A2:F1000",
+  "'Sale Items'!A2:G5000",
   "Customers!A2:D1000",
   "Suppliers!A2:D1000",
 ];
@@ -107,21 +108,29 @@ function DashboardContent() {
   const purchases = getRows("Purchases");
   const expenses = getRows("Expenses");
   const products = getRows("Products");
+  const saleItems = getRows("Sale Items");
   const customers = getRows("Customers");
   const suppliers = getRows("Suppliers");
 
-  const totalSales = sumCol(sales, 5); // Total column
+  const totalSalesExclGst = sumCol(sales, 3);
+  const totalSalesInclGst = sumCol(sales, 5);
   const totalPaid = sumCol(sales, 6);
   const totalDue = sumCol(sales, 7);
   const totalPurchases = sumCol(purchases, 3);
   const totalExpenses = sumCol(expenses, 2);
-  const netProfit = totalSales - totalPurchases - totalExpenses;
+  const productCosts = new Map(products.map((row) => [(row[1] ?? "").trim().toLowerCase(), toNum(row[4])]));
+  const costOfGoods = saleItems.reduce((sum, row) => sum + toNum(row[4]) * (productCosts.get((row[3] ?? "").trim().toLowerCase()) ?? 0), 0);
+  const grossProfit = totalSalesExclGst - costOfGoods;
+  const netProfit = grossProfit - totalExpenses;
 
   const kpis = [
-    { label: "Total Sales", value: fmt(totalSales), tone: "text-emerald-600 dark:text-emerald-400" },
+    { label: "Sales (excl. GST)", value: fmt(totalSalesExclGst), tone: "text-emerald-600 dark:text-emerald-400" },
+    { label: "Sales (incl. GST)", value: fmt(totalSalesInclGst), tone: "text-emerald-600 dark:text-emerald-400" },
     { label: "Total Purchases", value: fmt(totalPurchases), tone: "" },
     { label: "Expenses", value: fmt(totalExpenses), tone: "text-amber-600 dark:text-amber-400" },
+    { label: "Gross Profit", value: fmt(grossProfit), tone: grossProfit >= 0 ? "text-emerald-600 dark:text-emerald-400" : "text-destructive" },
     { label: "Net Profit", value: fmt(netProfit), tone: netProfit >= 0 ? "text-emerald-600 dark:text-emerald-400" : "text-destructive" },
+    { label: "Margin %", value: fmt(totalSalesExclGst ? (grossProfit / totalSalesExclGst) * 100 : 0), tone: "" },
     { label: "Amount Collected", value: fmt(totalPaid), tone: "" },
     { label: "Outstanding Dues", value: fmt(totalDue), tone: "text-destructive" },
   ];

@@ -1,4 +1,5 @@
 // Client-safe analytics helpers shared by the dashboard, analytics page and tables.
+import { normalizeDate } from "./erp-data";
 
 export function toNum(v: unknown) {
   if (v == null) return 0;
@@ -17,19 +18,8 @@ export function money(n: number) {
 
 /** Normalise many date shapes to YYYY-MM-DD. */
 export function parseDate(v: unknown): string | null {
-  if (!v) return null;
-  const s = String(v).trim();
-  const iso = /^(\d{4})-(\d{2})-(\d{2})/.exec(s);
-  if (iso) return `${iso[1]}-${iso[2]}-${iso[3]}`;
-  const dmy = /^(\d{1,2})[/-](\d{1,2})[/-](\d{4})/.exec(s);
-  if (dmy) {
-    const d = dmy[1]!.padStart(2, "0");
-    const m = dmy[2]!.padStart(2, "0");
-    return `${dmy[3]}-${m}-${d}`;
-  }
-  const t = Date.parse(s);
-  if (!isNaN(t)) return new Date(t).toISOString().slice(0, 10);
-  return null;
+  const date = normalizeDate(v);
+  return date || null;
 }
 
 export const todayIso = () => new Date().toISOString().slice(0, 10);

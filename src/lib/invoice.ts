@@ -1,6 +1,6 @@
 export type InvoiceMode = "gst" | "non-gst" | "quotation";
 export type InvoiceItem = { product: string; hsn: string; qty: number; rate: number; gstPercent: number };
-export type InvoiceDraft = { mode: InvoiceMode; invoice: string; date: string; validUntil: string; customer: string; customerAddress: string; vehicleNo: string; salesman: string; gstin: string; items: InvoiceItem[]; discount: number; paid: number; paymentMode: string; notes: string };
+export type InvoiceDraft = { mode: InvoiceMode; invoice: string; customerId: string; date: string; validUntil: string; customer: string; customerPhone: string; customerAddress: string; customerCity: string; customerState: string; gstin: string; items: InvoiceItem[]; discount: number; paid: number; paymentMode: string; notes: string };
 export const COMPANY = { name: "OBOSCO CLOTHING INDUSTRIES", address: "Near by Police Station Tanur, First Floor 22/242", state: "Kerala", phone: "+91 8089457918" };
 export const emptyItem = (): InvoiceItem => ({ product: "", hsn: "", qty: 1, rate: 0, gstPercent: 0 });
 export function itemValues(item: InvoiceItem, mode: InvoiceMode) { const taxable = Math.max(0, (item.qty || 0) * (item.rate || 0)); const gst = mode === "gst" ? +(taxable * ((item.gstPercent || 0) / 100)).toFixed(2) : 0; return { taxable, gst, total: +(taxable + gst).toFixed(2) }; }

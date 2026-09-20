@@ -9,19 +9,25 @@ export const toNum = (v: unknown) => {
 export const money = (n: number) =>
   n.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 
-/** Google Sheets sometimes returns serial numbers for dates. Normalise to YYYY-MM-DD. */
-export function normalizeDate(v: string | undefined): string {
+/** Parse Sheets/Excel serial dates from the 1899-12-30 epoch into ISO dates. */
+export function normalizeDate(v: unknown): string {
   const raw = String(v ?? "").trim();
   if (!raw) return "";
   if (/^\d{4}-\d{2}-\d{2}/.test(raw)) return raw.slice(0, 10);
-  if (/^\d{2,6}$/.test(raw)) {
-    const serial = parseInt(raw, 10);
-    const ms = (serial - 25569) * 86400 * 1000;
-    const d = new Date(ms);
+  if (/^\d+(\.\d+)?$/.test(raw)) {
+    const serial = Number(raw);
+    const d = new Date(Date.UTC(1899, 11, 30) + serial * 86400000);
     if (!isNaN(d.getTime())) return d.toISOString().slice(0, 10);
   }
   const d = new Date(raw);
   return isNaN(d.getTime()) ? "" : d.toISOString().slice(0, 10);
+}
+
+export function formatDateIndia(v: unknown): string {
+  const iso = normalizeDate(v);
+  if (!iso) return String(v ?? "");
+  const [year, month, day] = iso.split("-");
+  return `${day}-${month}-${year}`;
 }
 
 export type DateRangeKey = "today" | "week" | "month" | "all";

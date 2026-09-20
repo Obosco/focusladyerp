@@ -83,7 +83,7 @@ async function sheetsRequest<T>(path: string, init?: RequestInit): Promise<T> {
 
 async function readSheetValues(range: string): Promise<SheetValues> {
   const data = await sheetsRequest<{ values?: SheetValues }>(
-    `/values/${encodeURIComponent(range)}`,
+    `/values/${encodeURIComponent(range)}?valueRenderOption=UNFORMATTED_VALUE&dateTimeRenderOption=SERIAL_NUMBER`,
   );
   return data.values ?? [];
 }
@@ -96,7 +96,7 @@ export async function readRanges(ranges: string[]) {
   const params = new URLSearchParams();
   ranges.forEach((range) => params.append("ranges", range));
   const data = await sheetsRequest<{ valueRanges?: { range?: string; values?: SheetValues }[] }>(
-    `/values:batchGet?${params.toString()}`,
+    `/values:batchGet?${params.toString()}&valueRenderOption=UNFORMATTED_VALUE&dateTimeRenderOption=SERIAL_NUMBER`,
   );
 
   return (data.valueRanges ?? []).map((valueRange) => ({
@@ -120,6 +120,13 @@ export async function updateRange(range: string, values: SheetValues) {
   await sheetsRequest(`/values/${encodeURIComponent(range)}?valueInputOption=USER_ENTERED`, {
     method: "PUT",
     body: JSON.stringify({ values }),
+  });
+}
+
+async function clearRange(range: string) {
+  await sheetsRequest(`/values/${encodeURIComponent(range)}:clear`, {
+    method: "POST",
+    body: JSON.stringify({}),
   });
 }
 
@@ -192,7 +199,66 @@ export async function createProduct(p: ProductInput) {
   return { id, ...p };
 }
 
-export type CustomerInput = { name: string; phone?: string };
+export type CustomerInput = {
+  name: string;
+  phone?: string;
+  address?: string;
+  city?: string;
+  state?: string;
+  gstin?: string;
+  type?: "Retail" | "Wholesale" | "Bulk";
+};
+
+const normalizeCustomerText = (value: string | undefined) =>
+  String(value ?? "").trim().toLowerCase().replace(/\s+/g, " ");
+const normalizePhone = (value: string | undefined) => String(value ?? "").replace(/\D/g, "").replace(/^91/, "");
+
+type CustomerRecord = CustomerInput & { id: string; row: number };
+
+async function readCustomers(): Promise<CustomerRecord[]> {
+  const rows = await readRange("Customers!A2:T5000");
+  return rows.flatMap((row, index) => {
+    const name = String(row[1] ?? "").trim();
+    if (!name) return [];
+    return [{
+      id: String(row[0] ?? "").trim(),
+      name,
+      phone: String(row[2] ?? "").trim(),
+      address: String(row[3] ?? "").trim(),
+      city: String(row[4] ?? "").trim(),
+      state: String(row[5] ?? "").trim(),
+      gstin: String(row[6] ?? "").trim(),
+      type: (row[7] === "Wholesale" || row[7] === "Bulk" ? row[7] : "Retail") as CustomerInput["type"],
+      row: index + 2,
+    }];
+  });
+}
+
+async function resolveCustomer(input: InvoiceInput) {
+  const customers = await readCustomers();
+  const name = normalizeCustomerText(input.customer);
+  const phone = normalizePhone(input.customerPhone);
+  const gstin = normalizeCustomerText(input.gstin);
+  const match = customers.find((customer) =>
+    (name && normalizeCustomerText(customer.name) === name) ||
+    (phone && normalizePhone(customer.phone) === phone) ||
+    (gstin && normalizeCustomerText(customer.gstin) === gstin),
+  );
+  if (match) return { ...match, created: false };
+  const next = customers.length + 1;
+  const id = `C-${String(next).padStart(4, "0")}`;
+  const sheetRow = next + 1;
+  await appendRows("Customers!A:T", [[
+    id, input.customer.trim().replace(/\s+/g, " "), input.customerPhone ?? "", input.customerAddress ?? "",
+    input.customerCity ?? "", input.customerState ?? "", input.gstin ?? "", "Retail", "0", "0", "", input.notes ?? "", "TRUE",
+    new Date().toISOString(), input.date, paidDate(input.paid, input.date),
+    `=COUNTIF(Sales!Q:Q,A${sheetRow})`, `=SUMIF(Sales!Q:Q,A${sheetRow},Sales!F:F)`,
+    `=SUMIF(Sales!Q:Q,A${sheetRow},Sales!G:G)`, `=R${sheetRow}-S${sheetRow}`,
+  ]]);
+  return { id, name: input.customer, phone: input.customerPhone, address: input.customerAddress, city: input.customerCity, state: input.customerState, gstin: input.gstin, row: sheetRow, created: true };
+}
+
+function paidDate(paid: number, date: string) { return paid > 0 ? date : ""; }
 
 export async function createCustomer(c: CustomerInput) {
   const rows = await readRange("Customers!A2:A2000");
@@ -219,6 +285,10 @@ export type InvoiceInput = {
   date: string;
   validUntil?: string;
   customer: string;
+  customerId?: string;
+  customerPhone?: string;
+  customerCity?: string;
+  customerState?: string;
   customerAddress?: string;
   vehicleNo?: string;
   salesman?: string;
@@ -242,10 +312,16 @@ export function computeInvoice(input: InvoiceInput) {
 }
 
 export async function saveInvoice(input: InvoiceInput) {
+  const existingInvoices = await readRange("Sales!A2:A5000");
+  if (existingInvoices.some((row) => String(row[0] ?? "").trim() === input.invoice.trim())) {
+    throw new Error(`Invoice ${input.invoice} already exists.`);
+  }
+  const customer = await resolveCustomer(input);
   const { subtotal, gst, total, paid, due } = computeInvoice(input);
   const status = due <= 0 ? "Paid" : paid > 0 ? "Partial" : "Unpaid";
 
-  await appendRows("Sales!A:P", [
+  try {
+    await appendRows("Sales!A:Q", [
     [
       input.invoice,
       input.date,
@@ -263,10 +339,11 @@ export async function saveInvoice(input: InvoiceInput) {
       input.mode ?? "gst",
       input.customerAddress ?? "",
       input.validUntil ?? "",
+      customer.id,
     ],
-  ]);
+    ]);
 
-  await appendRows(
+    await appendRows(
     "'Sale Items'!A:M",
     input.items.map((i) => [
       input.invoice,
@@ -283,23 +360,27 @@ export async function saveInvoice(input: InvoiceInput) {
       i.size ?? "",
       i.color ?? "",
     ]),
-  );
+    );
 
   // Stock out — one row per variant sold.
-  await appendRows(
+    await appendRows(
     "Stock!A:F",
     input.items.map((i) => [i.product, "", String(i.qty), "", i.size ?? "", i.color ?? ""]),
-  );
+    );
 
   // Customer ledger: invoice debits the customer, payment credits it.
-  await appendRows("'Customer Ledger'!A:E", [
+    await appendRows("'Customer Ledger'!A:E", [
     [input.date, input.customer, String(total), String(paid), String(due)],
-  ]);
+    ]);
 
   if (paid > 0) {
-    await appendRows("'Daily Collection'!A:E", [
+      await appendRows("'Daily Collection'!A:E", [
       [input.date, input.customer, input.invoice, String(paid), input.paymentMode || "Cash"],
-    ]);
+      ]);
+    }
+  } catch (error) {
+    if (customer.created) await clearRange(`Customers!A${customer.row}:T${customer.row}`).catch(() => undefined);
+    throw error;
   }
 
   return { invoice: input.invoice, subtotal, gst, total, paid, due, status };

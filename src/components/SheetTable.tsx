@@ -4,26 +4,11 @@ import { Button } from "@/components/ui/button";
 import { ArrowDown, ArrowUp, Download, FileText, Printer, Search, X } from "lucide-react";
 import { exportTablePdf, recordDownload, safeName, stamp } from "@/lib/pdf";
 import { PRESETS, presetRange, toNum, type PresetKey } from "@/lib/stats";
+import { formatDateIndia, normalizeDate } from "@/lib/erp-data";
 
 function findDateCol(headers: string[]) {
   const i = headers.findIndex((h) => /date|day/i.test(h ?? ""));
   return i;
-}
-
-function parseDate(v: string | undefined) {
-  if (!v) return null;
-  const s = String(v).trim();
-  const iso = /^(\d{4})-(\d{2})-(\d{2})/.exec(s);
-  if (iso) return `${iso[1]}-${iso[2]}-${iso[3]}`;
-  const dmy = /^(\d{1,2})[/-](\d{1,2})[/-](\d{4})/.exec(s);
-  if (dmy) {
-    const d = dmy[1]!.padStart(2, "0");
-    const m = dmy[2]!.padStart(2, "0");
-    return `${dmy[3]}-${m}-${d}`;
-  }
-  const t = Date.parse(s);
-  if (!isNaN(t)) return new Date(t).toISOString().slice(0, 10);
-  return null;
 }
 
 export function SheetTable({
@@ -82,7 +67,7 @@ export function SheetTable({
     }
     if (dateCol >= 0 && (from || to)) {
       out = out.filter((r) => {
-        const d = parseDate(r[dateCol]);
+        const d = normalizeDate(r[dateCol]);
         if (!d) return false;
         if (from && d < from) return false;
         if (to && d > to) return false;
@@ -117,13 +102,16 @@ export function SheetTable({
   };
 
   const label = title ?? filename;
+  const displayRows = filtered.map((row) =>
+    row.map((value, index) => (index === dateCol ? formatDateIndia(value) : value)),
+  );
 
   const downloadCsv = () => {
     const escape = (v: string) => {
       const s = v ?? "";
       return /[",\n]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s;
     };
-    const csv = [headers, ...filtered]
+    const csv = [headers, ...displayRows]
       .map((r) => r.map((c) => escape(String(c ?? ""))).join(","))
       .join("\n");
     const blob = new Blob([csv], { type: "text/csv;charset=utf-8" });
@@ -151,7 +139,7 @@ export function SheetTable({
           ? `Period ${from || "start"} → ${to || "today"} · ${filtered.length} rows`
           : `${filtered.length} rows · ${new Date().toLocaleString()}`,
       headers,
-      rows: filtered.map((r) => headers.map((_, i) => r[i] ?? "")),
+      rows: displayRows.map((r) => headers.map((_, i) => r[i] ?? "")),
       filename,
     });
 
@@ -295,14 +283,16 @@ export function SheetTable({
                   </td>
                 </tr>
               ) : (
-                filtered.map((row, ri) => (
+                displayRows.map((row, ri) => (
                   <tr
                     key={ri}
                     className="border-t border-border transition-colors hover:bg-muted/30"
                   >
                     {headers.map((_, ci) => (
                       <td key={ci} className="max-w-[22rem] truncate px-4 py-2.5 align-top">
-                        {row[ci] ?? ""}
+                        {/signature|sign/i.test(headers[ci] ?? "") && row[ci]
+                          ? "Signed"
+                          : row[ci] ?? ""}
                       </td>
                     ))}
                   </tr>

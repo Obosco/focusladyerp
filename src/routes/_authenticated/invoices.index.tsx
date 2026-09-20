@@ -7,6 +7,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { FileText, Plus } from "lucide-react";
 import { exportTablePdf } from "@/lib/pdf";
+import { formatDateIndia, normalizeDate } from "@/lib/erp-data";
 
 const salesQuery = queryOptions({
   queryKey: ["erp", "sales-history"],
@@ -78,7 +79,7 @@ function InvoiceList() {
       rows.filter((r) => {
         const hay = `${r[0]} ${r[2]} ${r[8]}`.toLowerCase();
         if (q.trim() && !hay.includes(q.toLowerCase())) return false;
-        const d = (r[1] ?? "").slice(0, 10);
+        const d = normalizeDate(r[1]);
         if (from && d < from) return false;
         if (to && d > to) return false;
         return true;
@@ -188,7 +189,7 @@ function InvoiceList() {
                       {r[0]}
                     </Link>
                   </td>
-                  <td className="px-4 py-2.5">{r[1]}</td>
+                  <td className="px-4 py-2.5">{formatDateIndia(r[1])}</td>
                   <td className="px-4 py-2.5">{r[2]}</td>
                   <td className="px-4 py-2.5">{money(r[5] ?? "")}</td>
                   <td className="px-4 py-2.5">{money(r[6] ?? "")}</td>
