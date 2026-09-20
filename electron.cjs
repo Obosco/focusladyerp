@@ -29,7 +29,7 @@ function createWindow() {
     }
   });
 
-  win.loadURL("http://localhost:3000");
+  win.loadURL("https://focusladyerp.vercel.app");
 }
 
 app.whenReady().then(() => {
@@ -60,3 +60,4 @@ app.on("window-all-closed", () => {
   if (server) server.kill();
   app.quit();
 });
+
