@@ -6,12 +6,13 @@ import { getSheetsBatch } from "@/lib/sheets.functions";
 import { Button } from "@/components/ui/button";
 import { FileText, Printer } from "lucide-react";
 import { exportInvoicePdf } from "@/lib/pdf";
+import { formatDateIndia } from "@/lib/erp-data";
 
 const invoiceQuery = (invoice: string) =>
   queryOptions({
     queryKey: ["erp", "invoice", invoice],
     queryFn: () =>
-      getSheetsBatch({ data: { ranges: ["Sales!A2:L2000", "'Sale Items'!A2:G5000"] } }),
+      getSheetsBatch({ data: { ranges: ["Sales!A2:Q2000", "'Sale Items'!A2:M5000"] } }),
     staleTime: 15_000,
   });
 
@@ -83,7 +84,7 @@ function InvoiceView({ invoice }: { invoice: string }) {
 
   const doc = {
     invoice,
-    date: head[1] ?? "",
+    date: formatDateIndia(head[1]),
     customer: head[2] ?? "",
     items,
     subtotal,

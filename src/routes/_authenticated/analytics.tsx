@@ -98,9 +98,9 @@ type Table = { headers: string[]; rows: string[][] };
 
 function AnalyticsContent() {
   const { data } = useSuspenseQuery(analyticsQuery);
-  const [preset, setPreset] = useState<PresetKey>("30d");
-  const [from, setFrom] = useState(presetRange("30d").from);
-  const [to, setTo] = useState(presetRange("30d").to);
+  const [preset, setPreset] = useState<PresetKey>("all");
+  const [from, setFrom] = useState("");
+  const [to, setTo] = useState("");
   const [grouping, setGrouping] = useState<Grouping>("day");
 
   const tables = useMemo(() => {
@@ -119,6 +119,7 @@ function AnalyticsContent() {
       expenses: byName("Expenses"),
       collection: byName("Daily Collection"),
       saleItems: byName("Sale Items"),
+      products: byName("Products"),
       stock: byName("Stock"),
     };
   }, [data]);
@@ -141,6 +142,7 @@ function AnalyticsContent() {
 
     const sH = tables.sales.headers;
     const sTotal = col(sH, /^total$|grand|net amount/i, 5);
+    const sSubtotal = col(sH, /subtotal|taxable/i, 3);
     const sPaid = col(sH, /paid|received/i, 6);
     const sDue = col(sH, /due|balance|outstanding/i, 7);
     const sMode = col(sH, /mode|payment/i);
@@ -158,12 +160,12 @@ function AnalyticsContent() {
     const cMode = col(tables.collection.headers, /mode|method/i);
 
     const totalSales = sales.reduce((a, x) => a + toNum(x.r[sTotal]), 0);
+    const totalSalesExclGst = sales.reduce((a, x) => a + toNum(x.r[sSubtotal]), 0);
     const totalPaid = sales.reduce((a, x) => a + toNum(x.r[sPaid]), 0);
     const totalDue = sales.reduce((a, x) => a + toNum(x.r[sDue]), 0);
     const totalPurchases = purchases.reduce((a, x) => a + toNum(x.r[pAmt]), 0);
     const totalExpenses = expenses.reduce((a, x) => a + toNum(x.r[eAmt]), 0);
     const totalCollected = collection.reduce((a, x) => a + toNum(x.r[cAmt]), 0);
-    const netProfit = totalSales - totalPurchases - totalExpenses;
     const invoices = sales.length;
 
     const trend = series(
@@ -213,6 +215,15 @@ function AnalyticsContent() {
     const items = tables.saleItems.rows.filter((r) =>
       invoiceDates.has(String(r[siInv] ?? "").trim()),
     );
+    const productCosts = new Map(
+      tables.products.rows.map((row) => [String(row[1] ?? "").trim().toLowerCase(), toNum(row[4])]),
+    );
+    const costOfGoods = items.reduce(
+      (sum, row) => sum + toNum(row[siQty]) * (productCosts.get(String(row[siProd] ?? "").trim().toLowerCase()) ?? 0),
+      0,
+    );
+    const grossProfit = totalSalesExclGst - costOfGoods;
+    const netProfit = grossProfit - totalExpenses;
     const topProducts = topN(
       items.map((r) => ({ name: String(r[siProd] ?? ""), value: toNum(r[siAmt]) })),
       6,
@@ -247,6 +258,8 @@ function AnalyticsContent() {
 
     return {
       totalSales,
+      totalSalesExclGst,
+      grossProfit,
       totalPaid,
       totalDue,
       totalPurchases,
@@ -254,8 +267,8 @@ function AnalyticsContent() {
       totalCollected,
       netProfit,
       invoices,
-      avgTicket: invoices ? totalSales / invoices : 0,
-      margin: totalSales ? (netProfit / totalSales) * 100 : 0,
+      avgTicket: invoices ? totalSalesExclGst / invoices : 0,
+      margin: totalSalesExclGst ? (grossProfit / totalSalesExclGst) * 100 : 0,
       trend,
       flow,
       cumulative,

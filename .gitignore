@@ -45,3 +45,4 @@ service-account*.json
 
 # Vercel
 .vercel
+.env*
