@@ -5,7 +5,6 @@
 .wrangler
 release
 electron.cjs
-supabase
 
 # Never upload credentials — these belong in Vercel environment variables.
 .env

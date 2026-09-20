@@ -1574,20 +1574,22 @@ npm run dev
 ```sh
 npm i -g vercel
 vercel link
-vercel --prod
+npm run deploy
 ```
 
+`npm run deploy` builds the production app, checks the manifest, service worker,
+offline page, and icons, then deploys to Vercel. For a preview deployment use
+`npm run deploy:preview`. To only verify the PWA build locally, run
+`npm run pwa:check`.
+
 Set these in **Project Settings → Environment Variables** before the first deploy.
-The `VITE_*` values are inlined into the browser bundle at build time, so they must be
-available to the Build step, not just the runtime:
+Only server-side Google values are required:
 
 | Variable | Notes |
 | --- | --- |
-| `VITE_SUPABASE_URL`, `SUPABASE_URL` | Same value; the second is what SSR reads. |
-| `VITE_SUPABASE_PUBLISHABLE_KEY`, `SUPABASE_PUBLISHABLE_KEY` | Same value. |
-| `VITE_SUPABASE_PROJECT_ID`, `SUPABASE_PROJECT_ID` | Same value. |
-| `GOOGLE_SERVICE_ACCOUNT_JSON` | Service account key. `base64 -i key.json` avoids newline mangling. |
-| `SUPABASE_SERVICE_ROLE_KEY` | Optional — only for server code that bypasses RLS. |
+| `GOOGLE_SERVICE_ACCOUNT_EMAIL` | Google service account email. |
+| `GOOGLE_PRIVATE_KEY` | Service account private key with escaped newlines handled by the server. |
+| `GOOGLE_SHEETS_SPREADSHEET_ID` | Spreadsheet used by the ERP. |
 
 See `.env.example` for the full list.
 
@@ -1613,7 +1615,7 @@ The app installs to the desktop and home screen and runs standalone.
   repeat launches render without touching the network. Navigations are network-first,
   falling back to the last-seen page and then `public/offline.html`; HTML is never
   served stale, because a stale document can reference asset hashes a newer deploy no
-  longer has. Server function calls (`/_serverFn/*`) and Supabase traffic are never
+  longer has. Server function calls (`/_serverFn/*`) and Google Sheets traffic are never
   cached.
 - `src/lib/pwa.ts` — registers the worker after `load`, raises a toast offering a reload
   when a new version has been installed, and shows the install prompt.

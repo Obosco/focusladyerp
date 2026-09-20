@@ -1,129 +1,126 @@
-// Server-only Google Sheets helpers — direct Google API via service account.
-import { readFileSync } from "node:fs";
-import { resolve } from "node:path";
+// Server-only Google Sheets helpers backed by a service account.
 import { createSign } from "node:crypto";
-import { SPREADSHEET_ID } from "./erp-modules";
-
-const GATEWAY = "https://sheets.googleapis.com/v4";
-
-type ServiceAccount = { client_email: string; private_key: string; token_uri: string };
-
-let serviceAccount: ServiceAccount | undefined;
-
-// Serverless hosts have no key file on disk, so the credential can also arrive inline as
-// an env var — raw JSON or base64 of it. GOOGLE_SERVICE_ACCOUNT_FILE stays the local path.
-function readServiceAccountSource(): string {
-  const inline = process.env["GOOGLE_SERVICE_ACCOUNT_JSON"];
-  if (inline) {
-    const trimmed = inline.trim();
-    return trimmed.startsWith("{") ? trimmed : Buffer.from(trimmed, "base64").toString("utf8");
-  }
-
-  const file = process.env["GOOGLE_SERVICE_ACCOUNT_FILE"];
-  if (file) return readFileSync(resolve(process.cwd(), file), "utf8");
-
-  throw new Error(
-    "Google Sheets is not configured. Set GOOGLE_SERVICE_ACCOUNT_JSON to the service account key (JSON or base64), or GOOGLE_SERVICE_ACCOUNT_FILE to its path on disk.",
-  );
-}
-
-function loadServiceAccount(): ServiceAccount {
-  if (!serviceAccount) {
-    const parsed = JSON.parse(readServiceAccountSource()) as ServiceAccount;
-    if (!parsed.client_email || !parsed.private_key) {
-      throw new Error(
-        "Google service account key is missing client_email or private_key. Check the credential value.",
-      );
-    }
-    // Env vars round-trip newlines as the two characters \n; PEM parsing needs real ones.
-    serviceAccount = {
-      ...parsed,
-      token_uri: parsed.token_uri || "https://oauth2.googleapis.com/token",
-      private_key: parsed.private_key.replace(/\\n/g, "\n"),
-    };
-  }
-  return serviceAccount;
-}
-
-let cachedToken: { value: string; expiresAt: number } | undefined;
-
-async function accessToken(): Promise<string> {
-  if (cachedToken && Date.now() < cachedToken.expiresAt - 60_000) return cachedToken.value;
-  const sa = loadServiceAccount();
-  const b64 = (o: object) => Buffer.from(JSON.stringify(o)).toString("base64url");
-  const now = Math.floor(Date.now() / 1000);
-  const unsigned = `${b64({ alg: "RS256", typ: "JWT" })}.${b64({
-    iss: sa.client_email,
-    scope: "https://www.googleapis.com/auth/spreadsheets",
-    aud: sa.token_uri,
-    iat: now,
-    exp: now + 3600,
-  })}`;
-  const signature = createSign("RSA-SHA256").update(unsigned).sign(sa.private_key, "base64url");
-  const res = await fetch(sa.token_uri, {
-    method: "POST",
-    headers: { "Content-Type": "application/x-www-form-urlencoded" },
-    body: new URLSearchParams({
-      grant_type: "urn:ietf:params:oauth:grant-type:jwt-bearer",
-      assertion: `${unsigned}.${signature}`,
-    }),
-  });
-  const data = (await res.json()) as { access_token?: string; expires_in?: number };
-  if (!res.ok || !data.access_token) {
-    throw new Error(`Google auth failed (${res.status}): ${JSON.stringify(data).slice(0, 300)}`);
-  }
-  cachedToken = { value: data.access_token, expiresAt: Date.now() + (data.expires_in ?? 3600) * 1000 };
-  return cachedToken.value;
-}
 
 export type SheetValues = string[][];
 
-async function call(url: string, init?: RequestInit) {
-  const token = await accessToken();
-  const res = await fetch(url, {
-    ...init,
-    headers: {
-      Authorization: `Bearer ${token}`,
-      Accept: "application/json",
-      "Content-Type": "application/json",
-    },
-  });
-  const body = await res.text();
-  if (!res.ok) throw new Error(`Sheets ${res.status}: ${body.slice(0, 300)}`);
-  return body ? JSON.parse(body) : {};
+function getSpreadsheetId() {
+  const spreadsheetId = process.env.GOOGLE_SHEETS_SPREADSHEET_ID;
+  if (!spreadsheetId) {
+    throw new Error("Google Sheets spreadsheet ID is missing. Set GOOGLE_SHEETS_SPREADSHEET_ID.");
+  }
+  return spreadsheetId;
 }
 
-export async function readRange(range: string): Promise<SheetValues> {
-  const data = (await call(
-    `${GATEWAY}/spreadsheets/${SPREADSHEET_ID}/values/${range}`,
-  )) as { values?: SheetValues };
+function getServiceAccountCredentials() {
+  const email = process.env.GOOGLE_SERVICE_ACCOUNT_EMAIL;
+  const privateKey = process.env.GOOGLE_PRIVATE_KEY;
+
+  if (!email || !privateKey) {
+    throw new Error(
+      "Google Sheets credentials are missing. Set GOOGLE_SERVICE_ACCOUNT_EMAIL and GOOGLE_PRIVATE_KEY on the server.",
+    );
+  }
+
+  return {
+    email,
+    privateKey: privateKey.replace(/\\n/g, "\n"),
+  };
+}
+
+function encodeBase64Url(value: string) {
+  return Buffer.from(value).toString("base64url");
+}
+
+async function getAccessToken() {
+  const { email, privateKey } = getServiceAccountCredentials();
+  const now = Math.floor(Date.now() / 1000);
+  const header = encodeBase64Url(JSON.stringify({ alg: "RS256", typ: "JWT" }));
+  const claim = encodeBase64Url(
+    JSON.stringify({
+      iss: email,
+      scope: "https://www.googleapis.com/auth/spreadsheets",
+      aud: "https://oauth2.googleapis.com/token",
+      iat: now,
+      exp: now + 3600,
+    }),
+  );
+  const unsignedToken = `${header}.${claim}`;
+  const signer = createSign("RSA-SHA256");
+  signer.update(unsignedToken);
+  const assertion = `${unsignedToken}.${signer.sign(privateKey, "base64url")}`;
+  const response = await fetch("https://oauth2.googleapis.com/token", {
+    method: "POST",
+    headers: { "content-type": "application/x-www-form-urlencoded" },
+    body: new URLSearchParams({
+      grant_type: "urn:ietf:params:oauth:grant-type:jwt-bearer",
+      assertion,
+    }),
+  });
+  if (!response.ok) throw new Error("Google authentication failed.");
+  const data = (await response.json()) as { access_token?: string };
+  if (!data.access_token) throw new Error("Google authentication returned no access token.");
+  return data.access_token;
+}
+
+async function sheetsRequest<T>(path: string, init?: RequestInit): Promise<T> {
+  const response = await fetch(
+    `https://sheets.googleapis.com/v4/spreadsheets/${getSpreadsheetId()}${path}`,
+    {
+      ...init,
+      headers: {
+        authorization: `Bearer ${await getAccessToken()}`,
+        "content-type": "application/json",
+        ...init?.headers,
+      },
+    },
+  );
+  if (!response.ok) {
+    console.error("Google Sheets request failed", response.status);
+    throw new Error("Google Sheets request failed.");
+  }
+  return (await response.json()) as T;
+}
+
+async function readSheetValues(range: string): Promise<SheetValues> {
+  const data = await sheetsRequest<{ values?: SheetValues }>(
+    `/values/${encodeURIComponent(range)}`,
+  );
   return data.values ?? [];
 }
 
+export async function readRange(range: string): Promise<SheetValues> {
+  return readSheetValues(range);
+}
+
 export async function readRanges(ranges: string[]) {
-  const qs = ranges.map((r) => `ranges=${encodeURIComponent(r)}`).join("&");
-  const data = (await call(
-    `${GATEWAY}/spreadsheets/${SPREADSHEET_ID}/values:batchGet?${qs}`,
-  )) as { valueRanges?: Array<{ range: string; values?: SheetValues }> };
-  return (data.valueRanges ?? []).map((v) => ({
-    range: v.range,
-    values: v.values ?? [],
+  const params = new URLSearchParams();
+  ranges.forEach((range) => params.append("ranges", range));
+  const data = await sheetsRequest<{ valueRanges?: { range?: string; values?: SheetValues }[] }>(
+    `/values:batchGet?${params.toString()}`,
+  );
+
+  return (data.valueRanges ?? []).map((valueRange) => ({
+    range: valueRange.range ?? "",
+    values: valueRange.values ?? [],
   }));
 }
 
 export async function appendRows(range: string, values: SheetValues) {
   if (values.length === 0) return;
-  await call(
-    `${GATEWAY}/spreadsheets/${SPREADSHEET_ID}/values/${range}:append?valueInputOption=USER_ENTERED&insertDataOption=INSERT_ROWS`,
-    { method: "POST", body: JSON.stringify({ values }) },
+  await sheetsRequest(
+    `/values/${encodeURIComponent(range)}:append?valueInputOption=USER_ENTERED&insertDataOption=INSERT_ROWS`,
+    {
+      method: "POST",
+      body: JSON.stringify({ values }),
+    },
   );
 }
 
 export async function updateRange(range: string, values: SheetValues) {
-  await call(
-    `${GATEWAY}/spreadsheets/${SPREADSHEET_ID}/values/${range}?valueInputOption=USER_ENTERED`,
-    { method: "PUT", body: JSON.stringify({ values }) },
-  );
+  await sheetsRequest(`/values/${encodeURIComponent(range)}?valueInputOption=USER_ENTERED`, {
+    method: "PUT",
+    body: JSON.stringify({ values }),
+  });
 }
 
 /* ---------------------------------- settings --------------------------------- */

@@ -6,7 +6,7 @@
  *   icons, manifest  stale-while-revalidate — same path across deploys, refresh in background.
  *   navigations      stale-while-revalidate — serve the last shell immediately, refresh it in
  *                    the background. Offline falls back to /offline.html.
- *   everything else  bypassed — /_serverFn/* calls, non-GET, Supabase and Google requests
+ *   everything else  bypassed — /_serverFn/* calls, non-GET, and Google API requests
  *                    must never be served from cache.
  */
 

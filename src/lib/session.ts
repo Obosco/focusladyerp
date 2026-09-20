@@ -1,11 +1,8 @@
-// Client-side session hygiene: "remember me" + automatic idle expiry.
-import { supabase } from "@/integrations/supabase/client";
-
+// Client-side session hygiene used by the PWA shell.
 const REMEMBER_KEY = "flb-erp-remember";
 const LAST_ACTIVE_KEY = "flb-erp-last-active";
 const TAB_KEY = "flb-erp-tab-open";
 
-// Sessions expire after 30 minutes of inactivity.
 export const IDLE_TIMEOUT_MS = 30 * 60 * 1000;
 
 export function setRememberMe(remember: boolean) {
@@ -27,7 +24,6 @@ export function touchSession() {
 
 export function isSessionExpired() {
   if (typeof window === "undefined") return false;
-  // Not remembered + browser/tab restarted → require a fresh login.
   if (!isRemembered() && !sessionStorage.getItem(TAB_KEY)) return true;
   const last = Number(localStorage.getItem(LAST_ACTIVE_KEY) ?? 0);
   if (!last) return false;
@@ -39,5 +35,4 @@ export async function signOutClean() {
     localStorage.removeItem(LAST_ACTIVE_KEY);
     sessionStorage.removeItem(TAB_KEY);
   }
-  await supabase.auth.signOut();
 }
