@@ -5,7 +5,7 @@ const fs = require("fs");
 
 let server;
 
-// Load .env so the spawned server gets Supabase + Google Sheets credentials.
+// Load .env so the spawned server gets Google Sheets credentials.
 function loadEnv(dir) {
   try {
     for (const line of fs.readFileSync(path.join(dir, ".env"), "utf8").split("\n")) {

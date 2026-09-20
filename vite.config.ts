@@ -51,6 +51,8 @@ const vercelRoutes: {
 ];
 
 export default defineConfig(({ command }) => ({
+  publicDir: "public",
+
   plugins: [
     loadServerEnv(),
     tailwindcss(),
