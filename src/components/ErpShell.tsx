@@ -1,5 +1,5 @@
 import { Link, useNavigate, useRouterState } from "@tanstack/react-router";
-import { MODULES, GROUPS, SPREADSHEET_ID, type ErpModule } from "@/lib/erp-modules";
+import { MODULES, GROUPS, type ErpModule } from "@/lib/erp-modules";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import {
@@ -12,9 +12,10 @@ import {
   Settings,
 } from "lucide-react";
 import { signOutClean } from "@/lib/session";
-import { useQueryClient } from "@tanstack/react-query";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import type { ReactNode } from "react";
 import InstallButton from "@/components/install-button";
+import { getSheetsConnection } from "@/lib/sheets.functions";
 
 
 function NavItem({ mod, active }: { mod: ErpModule; active: boolean }) {
@@ -52,6 +53,11 @@ export function ErpShell({
   const path = useRouterState({ select: (s) => s.location.pathname });
   const navigate = useNavigate();
   const queryClient = useQueryClient();
+  const { data: sheetsConnection } = useQuery({
+    queryKey: ["erp", "sheets-connection"],
+    queryFn: () => getSheetsConnection(),
+    staleTime: 5 * 60_000,
+  });
 
   async function handleSignOut() {
     await queryClient.cancelQueries();
@@ -131,15 +137,17 @@ export function ErpShell({
               <Settings className="h-4 w-4 shrink-0" />
               Settings
             </Link>
-            <a
-              href={`https://docs.google.com/spreadsheets/d/${SPREADSHEET_ID}/edit`}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="flex items-center gap-2 rounded-md px-3 py-2 text-xs text-muted-foreground hover:bg-sidebar-accent hover:text-sidebar-accent-foreground"
-            >
-              <ExternalLink className="h-3.5 w-3.5" />
-              Open Sheet
-            </a>
+            {sheetsConnection?.spreadsheetId ? (
+              <a
+                href={`https://docs.google.com/spreadsheets/d/${sheetsConnection.spreadsheetId}/edit`}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="flex items-center gap-2 rounded-md px-3 py-2 text-xs text-muted-foreground hover:bg-sidebar-accent hover:text-sidebar-accent-foreground"
+              >
+                <ExternalLink className="h-3.5 w-3.5" />
+                Open Sheet
+              </a>
+            ) : null}
             <button
               type="button"
               onClick={handleSignOut}

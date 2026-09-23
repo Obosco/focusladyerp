@@ -28,6 +28,15 @@ function getIconPath() {
   });
 }
 
+function isSafeExternalUrl(value) {
+  try {
+    const url = new URL(value);
+    return url.protocol === "https:" || url.protocol === "http:";
+  } catch {
+    return false;
+  }
+}
+
 function createLoadingHtml() {
   return `
     <!DOCTYPE html>
@@ -176,7 +185,7 @@ function createWindow() {
   mainWindow.webContents.setWindowOpenHandler(({ url }) => {
     const isExternal = !url.startsWith(APP_URL) && !url.startsWith("about:blank");
     if (isExternal) {
-      shell.openExternal(url);
+      if (isSafeExternalUrl(url)) shell.openExternal(url);
       return { action: "deny" };
     }
     return { action: "allow" };
@@ -185,7 +194,7 @@ function createWindow() {
   mainWindow.webContents.on("will-navigate", (event, url) => {
     if (!url.startsWith(APP_URL) && !url.startsWith("about:blank")) {
       event.preventDefault();
-      shell.openExternal(url);
+      if (isSafeExternalUrl(url)) shell.openExternal(url);
     }
   });
 

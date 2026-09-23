@@ -1,10 +1,10 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { useEffect, useState } from "react";
 import { ErpShell } from "@/components/ErpShell";
-import { SPREADSHEET_ID } from "@/lib/erp-modules";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { useQueryClient } from "@tanstack/react-query";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { getSheetsConnection } from "@/lib/sheets.functions";
 import { Download, ExternalLink, History, RefreshCcw } from "lucide-react";
 import InstallButton from "@/components/install-button";
 import { isInstalled, isIos } from "@/lib/pwa";
@@ -26,6 +26,11 @@ export const Route = createFileRoute("/_authenticated/settings")({
 
 function SettingsPage() {
   const queryClient = useQueryClient();
+  const { data: sheetsConnection } = useQuery({
+    queryKey: ["erp", "sheets-connection"],
+    queryFn: () => getSheetsConnection(),
+    staleTime: 5 * 60_000,
+  });
   const [installed, setInstalled] = useState(false);
   const [ios, setIos] = useState(false);
 
@@ -76,19 +81,18 @@ function SettingsPage() {
               The ERP reads and writes the connected company spreadsheet on the server.
               Service account credentials stay in Vercel environment variables.
             </p>
-            <div className="rounded-md border border-border bg-muted/40 p-3 text-xs">
-              Spreadsheet ID: <span className="font-mono">{SPREADSHEET_ID}</span>
-            </div>
             <div className="flex flex-wrap gap-2">
-              <Button variant="outline" size="sm" asChild>
-                <a
-                  href={`https://docs.google.com/spreadsheets/d/${SPREADSHEET_ID}/edit`}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                >
-                  <ExternalLink className="mr-2 h-4 w-4" /> Open spreadsheet
-                </a>
-              </Button>
+              {sheetsConnection?.spreadsheetId ? (
+                <Button variant="outline" size="sm" asChild>
+                  <a
+                    href={`https://docs.google.com/spreadsheets/d/${sheetsConnection.spreadsheetId}/edit`}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                  >
+                    <ExternalLink className="mr-2 h-4 w-4" /> Open spreadsheet
+                  </a>
+                </Button>
+              ) : null}
               <Button
                 variant="outline"
                 size="sm"
