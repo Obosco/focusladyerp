@@ -7,6 +7,7 @@ import { Button } from "@/components/ui/button";
 import { FileText, Printer } from "lucide-react";
 import { exportInvoicePdf } from "@/lib/pdf";
 import { formatDateIndia } from "@/lib/erp-data";
+import { InvoiceBarcode } from "@/components/InvoiceBarcode";
 
 const invoiceQuery = (invoice: string) =>
   queryOptions({
@@ -121,6 +122,7 @@ function InvoiceView({ invoice }: { invoice: string }) {
             <div className="font-mono font-medium">{invoice}</div>
             <div className="text-muted-foreground">{doc.date}</div>
           </div>
+          <InvoiceBarcode value={invoice} />
         </div>
 
         <div className="mt-6 text-sm">
