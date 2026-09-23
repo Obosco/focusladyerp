@@ -19,10 +19,6 @@ function loadServerEnv(): Plugin {
   };
 }
 
-const nitroPreset =
-  process.env.NITRO_PRESET ||
-  (process.env.VERCEL ? "vercel" : "node-server");
-
 const vercelRoutes: {
   src: string;
   continue: boolean;
@@ -50,8 +46,15 @@ const vercelRoutes: {
   },
 ];
 
-export default defineConfig(({ command }) => ({
-  publicDir: "public",
+export default defineConfig(({ command, mode }) => {
+  const env = loadEnv(mode, process.cwd(), "");
+  const nitroPreset =
+    process.env.NITRO_PRESET ||
+    env.NITRO_PRESET ||
+    (process.env.VERCEL || env.VERCEL ? "vercel" : "node-server");
+
+  return {
+    publicDir: "public",
 
   plugins: [
     loadServerEnv(),
@@ -107,8 +110,9 @@ export default defineConfig(({ command }) => ({
     ],
   },
 
-  server: {
-    host: "::",
-    port: 8080,
-  },
-}));
+    server: {
+      host: "::",
+      port: 8080,
+    },
+  };
+});
