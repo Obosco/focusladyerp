@@ -1,5 +1,27 @@
 # Focus Lady Bra Cloud
 
+## Desktop app development
+
+Run the Electron desktop app locally:
+
+```powershell
+npm.cmd run desktop
+```
+
+Build the Windows installer:
+
+```powershell
+npm.cmd run desktop:build
+```
+
+Expected output:
+
+```text
+release/FocusLady-ERP-Setup.exe
+```
+
+This desktop shell loads the production app at https://focusladyerp.vercel.app while preserving the existing web/PWA experience, authentication flow, invoice features, and Vercel deployment.
+
 Here's an expanded, enterprise-grade Google Sheets integration specification customized for Focus Lady Bra ERP with additional HR, payroll, finance, manufacturing, and management features.
 
 

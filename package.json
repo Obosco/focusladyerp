@@ -15,6 +15,9 @@
     "lint": "eslint .",
     "format": "prettier --write .",
     "electron": "electron .",
+    "desktop": "electron electron.cjs",
+    "desktop:build": "electron-builder --win",
+    "desktop:dist": "npm run build && electron-builder --win",
     "dist": "npm run build && electron-builder"
   },
   "dependencies": {
@@ -50,12 +53,14 @@
     "@tanstack/react-router": "^1.170.16",
     "@tanstack/react-start": "^1.168.26",
     "@tanstack/router-plugin": "^1.168.18",
+    "@types/jsbarcode": "^3.11.4",
     "class-variance-authority": "^0.7.1",
     "clsx": "^2.1.1",
     "cmdk": "^1.1.1",
     "date-fns": "^4.1.0",
     "embla-carousel-react": "^8.6.0",
     "input-otp": "^1.4.2",
+    "jsbarcode": "^3.12.3",
     "jspdf": "^4.2.1",
     "jspdf-autotable": "^5.0.8",
     "lucide-react": "^0.575.0",
@@ -74,6 +79,7 @@
     "zod": "^3.24.2"
   },
   "devDependencies": {
+    "@types/jsbarcode": "^3.11.4",
     "@eslint/js": "^9.32.0",
     "@types/node": "^22.16.5",
     "@types/react": "^19.2.0",
@@ -96,19 +102,31 @@
   },
   "main": "electron.cjs",
   "build": {
-    "appId": "com.obosco.focusladyerp",
-    "productName": "FocusLadyERP",
+    "appId": "com.focuslady.erp",
+    "productName": "FocusLady ERP",
+    "executableName": "FocusLadyERP",
     "directories": {
       "output": "release"
     },
     "files": [
       "electron.cjs",
-      ".output/**/*",
-      "package.json"
+      "preload.js",
+      "public/**/*",
+      "package.json",
+      "package-lock.json"
     ],
     "win": {
       "target": "nsis",
-      "artifactName": "FocusLadyERP-Setup-${version}.${ext}"
+      "icon": "public/icon-512.png",
+      "artifactName": "FocusLady-ERP-Setup.exe",
+      "requestedExecutionLevel": "asInvoker"
+    },
+    "nsis": {
+      "oneClick": false,
+      "allowToChangeInstallationDirectory": true,
+      "createDesktopShortcut": true,
+      "createStartMenuShortcut": true,
+      "shortcutName": "FocusLady ERP"
     }
   },
   "version": "1.0.0",
