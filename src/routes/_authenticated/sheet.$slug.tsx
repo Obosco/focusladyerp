@@ -1,10 +1,11 @@
 import { createFileRoute, notFound, Link } from "@tanstack/react-router";
-import { queryOptions, useSuspenseQuery } from "@tanstack/react-query";
+import { queryOptions, useQuery, useSuspenseQuery } from "@tanstack/react-query";
 import { Suspense } from "react";
 import { ErpShell } from "@/components/ErpShell";
 import { SheetTable } from "@/components/SheetTable";
 import { getSheetRange } from "@/lib/sheets.functions";
-import { getModuleBySlug, SPREADSHEET_ID } from "@/lib/erp-modules";
+import { getModuleBySlug } from "@/lib/erp-modules";
+import { getSheetsConnection } from "@/lib/sheets.functions";
 import { Button } from "@/components/ui/button";
 import { ExternalLink, RefreshCcw } from "lucide-react";
 
@@ -58,6 +59,11 @@ export const Route = createFileRoute("/_authenticated/sheet/$slug")({
 function SheetPage() {
   const { slug } = Route.useParams();
   const mod = getModuleBySlug(slug)!;
+  const { data: sheetsConnection } = useQuery({
+    queryKey: ["erp", "sheets-connection"],
+    queryFn: () => getSheetsConnection(),
+    staleTime: 5 * 60_000,
+  });
 
   return (
     <ErpShell
@@ -67,13 +73,15 @@ function SheetPage() {
       actions={
         <>
           <Button variant="outline" size="sm" asChild>
-            <a
-              href={`https://docs.google.com/spreadsheets/d/${SPREADSHEET_ID}/edit#gid=0`}
-              target="_blank"
-              rel="noopener noreferrer"
-            >
-              <ExternalLink className="mr-2 h-4 w-4" /> Edit in Sheets
-            </a>
+            {sheetsConnection?.spreadsheetId ? (
+              <a
+                href={`https://docs.google.com/spreadsheets/d/${sheetsConnection.spreadsheetId}/edit#gid=0`}
+                target="_blank"
+                rel="noopener noreferrer"
+              >
+                <ExternalLink className="mr-2 h-4 w-4" /> Edit in Sheets
+              </a>
+            ) : null}
           </Button>
           <Button variant="outline" size="sm" onClick={() => window.location.reload()}>
             <RefreshCcw className="mr-2 h-4 w-4" /> Refresh

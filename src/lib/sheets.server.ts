@@ -1,39 +1,103 @@
 // Server-only Google Sheets helpers backed by a service account.
 import { createSign } from "node:crypto";
+import { readFileSync } from "node:fs";
+import { ALLOWED_SHEET_TITLES } from "./erp-modules";
+import { invoiceTotals } from "./invoice";
 
 export type SheetValues = string[][];
 
-function getSpreadsheetId() {
-  const spreadsheetId = process.env.GOOGLE_SHEETS_SPREADSHEET_ID;
+function firstEnv(...keys: string[]) {
+  for (const key of keys) {
+    const value = process.env[key];
+    if (typeof value === "string" && value.trim()) return value.trim();
+  }
+  return "";
+}
+
+export function getSpreadsheetId() {
+  const spreadsheetId =
+    firstEnv("GOOGLE_SHEET_ID", "GOOGLE_SHEETS_SPREADSHEET_ID", "GOOGLE_SPREADSHEET_ID");
   if (!spreadsheetId) {
-    throw new Error("Google Sheets spreadsheet ID is missing. Set GOOGLE_SHEETS_SPREADSHEET_ID.");
+    throw new Error(
+      "Google Sheets spreadsheet ID is missing. Set GOOGLE_SHEET_ID or GOOGLE_SHEETS_SPREADSHEET_ID.",
+    );
   }
   return spreadsheetId;
 }
 
-function getServiceAccountCredentials() {
-  const email = process.env.GOOGLE_SERVICE_ACCOUNT_EMAIL;
-  const privateKey = process.env.GOOGLE_PRIVATE_KEY;
+function normalizePrivateKey(raw: string) {
+  let key = raw.trim();
+  if (
+    (key.startsWith('"') && key.endsWith('"')) ||
+    (key.startsWith("'") && key.endsWith("'"))
+  ) {
+    key = key.slice(1, -1);
+  }
+  key = key.replace(/\\n/g, "\n").replace(/\r\n/g, "\n");
+  if (!key.includes("BEGIN")) {
+    key = `-----BEGIN PRIVATE KEY-----\n${key}\n-----END PRIVATE KEY-----\n`;
+  }
+  return key;
+}
 
+function parseServiceAccountJson(raw: string) {
+  const trimmed = raw.trim();
+  const jsonText = trimmed.startsWith("{")
+    ? trimmed
+    : Buffer.from(trimmed, "base64").toString("utf8");
+  const parsed = JSON.parse(jsonText) as { client_email?: string; private_key?: string };
+  if (!parsed.client_email || !parsed.private_key) {
+    throw new Error("Google service account JSON is missing client_email or private_key.");
+  }
+  return { email: parsed.client_email, privateKey: normalizePrivateKey(parsed.private_key) };
+}
+
+function getServiceAccountCredentials() {
+  const json = firstEnv("GOOGLE_SERVICE_ACCOUNT_JSON", "GOOGLE_SERVICE_ACCOUNT");
+  if (json) return parseServiceAccountJson(json);
+
+  const file = firstEnv("GOOGLE_SERVICE_ACCOUNT_FILE", "GOOGLE_APPLICATION_CREDENTIALS");
+  if (file) return parseServiceAccountJson(readFileSync(file, "utf8"));
+
+  const email = firstEnv("GOOGLE_SERVICE_ACCOUNT_EMAIL", "GOOGLE_CLIENT_EMAIL");
+  const privateKey = firstEnv("GOOGLE_PRIVATE_KEY");
   if (!email || !privateKey) {
     throw new Error(
       "Google Sheets credentials are missing. Set GOOGLE_SERVICE_ACCOUNT_EMAIL and GOOGLE_PRIVATE_KEY on the server.",
     );
   }
+  return { email, privateKey: normalizePrivateKey(privateKey) };
+}
 
-  return {
-    email,
-    privateKey: privateKey.replace(/\\n/g, "\n"),
-  };
+function sheetTitleFromRange(range: string) {
+  const trimmed = range.trim();
+  if (trimmed.startsWith("'")) {
+    const end = trimmed.indexOf("'!");
+    if (end > 1) return trimmed.slice(1, end);
+  }
+  const bang = trimmed.indexOf("!");
+  return bang > 0 ? trimmed.slice(0, bang) : trimmed;
+}
+
+function assertAllowedRange(range: string) {
+  const title = sheetTitleFromRange(range);
+  if (!ALLOWED_SHEET_TITLES.includes(title)) {
+    throw new Error("That worksheet is not available to this ERP.");
+  }
 }
 
 function encodeBase64Url(value: string) {
   return Buffer.from(value).toString("base64url");
 }
 
+let cachedAccessToken: { token: string; exp: number } | undefined;
+
 async function getAccessToken() {
-  const { email, privateKey } = getServiceAccountCredentials();
   const now = Math.floor(Date.now() / 1000);
+  if (cachedAccessToken && cachedAccessToken.exp - 60 > now) {
+    return cachedAccessToken.token;
+  }
+  const { email, privateKey } = getServiceAccountCredentials();
   const header = encodeBase64Url(JSON.stringify({ alg: "RS256", typ: "JWT" }));
   const claim = encodeBase64Url(
     JSON.stringify({
@@ -59,6 +123,7 @@ async function getAccessToken() {
   if (!response.ok) throw new Error("Google authentication failed.");
   const data = (await response.json()) as { access_token?: string };
   if (!data.access_token) throw new Error("Google authentication returned no access token.");
+  cachedAccessToken = { token: data.access_token, exp: now + 3300 };
   return data.access_token;
 }
 
@@ -75,13 +140,25 @@ async function sheetsRequest<T>(path: string, init?: RequestInit): Promise<T> {
     },
   );
   if (!response.ok) {
-    console.error("Google Sheets request failed", response.status);
-    throw new Error("Google Sheets request failed.");
+    const detail = (await response.text()).replace(/\s+/g, " ").slice(0, 240);
+    console.error("Google Sheets request failed", response.status, detail);
+    throw new SheetsRequestError(response.status, detail);
   }
   return (await response.json()) as T;
 }
 
+class SheetsRequestError extends Error {
+  constructor(
+    readonly status: number,
+    detail: string,
+  ) {
+    super(`Google Sheets request failed (HTTP ${status})${detail ? `: ${detail}` : "."}`);
+    this.name = "SheetsRequestError";
+  }
+}
+
 async function readSheetValues(range: string): Promise<SheetValues> {
+  assertAllowedRange(range);
   const data = await sheetsRequest<{ values?: SheetValues }>(
     `/values/${encodeURIComponent(range)}?valueRenderOption=UNFORMATTED_VALUE&dateTimeRenderOption=SERIAL_NUMBER`,
   );
@@ -93,20 +170,42 @@ export async function readRange(range: string): Promise<SheetValues> {
 }
 
 export async function readRanges(ranges: string[]) {
+  ranges.forEach(assertAllowedRange);
   const params = new URLSearchParams();
   ranges.forEach((range) => params.append("ranges", range));
-  const data = await sheetsRequest<{ valueRanges?: { range?: string; values?: SheetValues }[] }>(
-    `/values:batchGet?${params.toString()}&valueRenderOption=UNFORMATTED_VALUE&dateTimeRenderOption=SERIAL_NUMBER`,
-  );
+  try {
+    const data = await sheetsRequest<{ valueRanges?: { range?: string; values?: SheetValues }[] }>(
+      `/values:batchGet?${params.toString()}&valueRenderOption=UNFORMATTED_VALUE&dateTimeRenderOption=SERIAL_NUMBER`,
+    );
 
-  return (data.valueRanges ?? []).map((valueRange) => ({
-    range: valueRange.range ?? "",
-    values: valueRange.values ?? [],
-  }));
+    return (data.valueRanges ?? []).map((valueRange) => ({
+      range: valueRange.range ?? "",
+      values: valueRange.values ?? [],
+    }));
+  } catch (error) {
+    // Google rejects the entire batch when one optional worksheet is missing.
+    // Retry ranges independently so dashboard/report pages can still render.
+    if (!(error instanceof SheetsRequestError) || error.status !== 400) throw error;
+    const results = await Promise.all(
+      ranges.map(async (range) => {
+        try {
+          return { range, values: await readSheetValues(range) };
+        } catch (rangeError) {
+          if (rangeError instanceof SheetsRequestError && rangeError.status === 400) {
+            console.warn("Google Sheets range unavailable", range);
+            return { range, values: [] as SheetValues };
+          }
+          throw rangeError;
+        }
+      }),
+    );
+    return results;
+  }
 }
 
 export async function appendRows(range: string, values: SheetValues) {
   if (values.length === 0) return;
+  assertAllowedRange(range);
   await sheetsRequest(
     `/values/${encodeURIComponent(range)}:append?valueInputOption=USER_ENTERED&insertDataOption=INSERT_ROWS`,
     {
@@ -117,6 +216,7 @@ export async function appendRows(range: string, values: SheetValues) {
 }
 
 export async function updateRange(range: string, values: SheetValues) {
+  assertAllowedRange(range);
   await sheetsRequest(`/values/${encodeURIComponent(range)}?valueInputOption=USER_ENTERED`, {
     method: "PUT",
     body: JSON.stringify({ values }),
@@ -124,6 +224,7 @@ export async function updateRange(range: string, values: SheetValues) {
 }
 
 async function clearRange(range: string) {
+  assertAllowedRange(range);
   await sheetsRequest(`/values/${encodeURIComponent(range)}:clear`, {
     method: "POST",
     body: JSON.stringify({}),
@@ -261,10 +362,21 @@ async function resolveCustomer(input: InvoiceInput) {
 function paidDate(paid: number, date: string) { return paid > 0 ? date : ""; }
 
 export async function createCustomer(c: CustomerInput) {
-  const rows = await readRange("Customers!A2:A2000");
-  const id = `C-${String(rows.filter((r) => (r[0] ?? "").trim()).length + 1).padStart(4, "0")}`;
-  await appendRows("Customers!A:D", [[id, c.name, c.phone ?? "", "0"]]);
-  return { id, ...c };
+  return resolveCustomer({
+    invoice: "",
+    date: new Date().toISOString().slice(0, 10),
+    customer: c.name,
+    customerPhone: c.phone,
+    customerAddress: c.address,
+    customerCity: c.city,
+    customerState: c.state,
+    gstin: c.gstin,
+    items: [{ product: "-", qty: 0, rate: 0 }],
+    gstPercent: 0,
+    discount: 0,
+    paid: 0,
+    notes: "",
+  });
 }
 
 /* ---------------------------------- invoices --------------------------------- */
@@ -302,13 +414,25 @@ export type InvoiceInput = {
 };
 
 export function computeInvoice(input: InvoiceInput) {
-  const gross = input.items.reduce((a, i) => a + i.qty * i.rate, 0);
-  const subtotal = Math.max(0, gross - (input.discount || 0));
-  const gst = input.mode === "non-gst" || input.mode === "quotation" ? 0 : +(subtotal * ((input.gstPercent || 0) / 100)).toFixed(2);
-  const total = +(subtotal + gst).toFixed(2);
-  const paid = Math.min(input.paid || 0, total);
-  const due = +(total - paid).toFixed(2);
-  return { subtotal: +subtotal.toFixed(2), gst, total, paid, due };
+  const totals = invoiceTotals({
+    mode: input.mode ?? "gst",
+    items: input.items.map((item) => ({
+      product: item.product,
+      hsn: item.hsn ?? "",
+      qty: item.qty,
+      rate: item.rate,
+      gstPercent: item.gstPercent ?? input.gstPercent ?? 0,
+    })),
+    discount: input.discount,
+    paid: input.paid,
+  });
+  return {
+    subtotal: totals.subtotal,
+    gst: totals.gst,
+    total: totals.total,
+    paid: totals.paid,
+    due: totals.due,
+  };
 }
 
 export async function saveInvoice(input: InvoiceInput) {

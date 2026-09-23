@@ -4,8 +4,8 @@
  * Caching rules, by request kind:
  *   /assets/*        cache-first  — content-hashed by Vite, so a URL never changes meaning.
  *   icons, manifest  stale-while-revalidate — same path across deploys, refresh in background.
- *   navigations      stale-while-revalidate — serve the last shell immediately, refresh it in
- *                    the background. Offline falls back to /offline.html.
+ *   navigations      network-only — authenticated HTML must never be shared through Cache API.
+ *                    Offline falls back to /offline.html.
  *   everything else  bypassed — /_serverFn/* calls, non-GET, and Google API requests
  *                    must never be served from cache.
  */
@@ -36,12 +36,6 @@ self.addEventListener("install", (event) => {
           cache.add(new Request(url, { cache: "reload" })).catch(() => undefined),
         ),
       );
-      try {
-        const res = await fetch(new Request("/", { cache: "reload" }));
-        if (res && res.ok) await cache.put(new Request("/"), res.clone());
-      } catch {
-        // Offline installs still succeed with offline.html
-      }
       await self.skipWaiting();
     })(),
   );
@@ -148,29 +142,16 @@ async function staleWhileRevalidate(event) {
   throw new Error(`Unavailable offline: ${request.url}`);
 }
 
-async function networkFirstNavigation(event) {
-  const cache = await caches.open(SHELL_CACHE);
-  const cached = await cache.match(event.request);
-  const network = (async () => {
-    try {
-      const preloaded = await event.preloadResponse;
-      const response = preloaded || (await fetch(event.request));
-      if (response && response.ok) await cache.put(event.request, response.clone());
-      return response;
-    } catch {
-      return undefined;
-    }
-  })();
-
-  if (cached) {
-    event.waitUntil(network);
-    return cached;
+async function networkOnlyNavigation(event) {
+  try {
+    const preloaded = await event.preloadResponse;
+    const response = preloaded || (await fetch(event.request));
+    if (response) return response;
+  } catch {
+    // Fall through to the public offline page.
   }
-
-  const response = await network;
-  if (response && response.ok) return response;
   return (
-    (await cache.match(OFFLINE_URL)) ||
+    (await caches.match(OFFLINE_URL)) ||
     new Response("Offline", { status: 503, headers: { "content-type": "text/plain" } })
   );
 }
@@ -186,7 +167,7 @@ self.addEventListener("fetch", (event) => {
   if (url.pathname.startsWith("/api/")) return;
 
   if (request.mode === "navigate") {
-    event.respondWith(networkFirstNavigation(event));
+    event.respondWith(networkOnlyNavigation(event));
     return;
   }
 

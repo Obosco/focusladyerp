@@ -25,8 +25,6 @@ export type ErpModule = {
   icon: LucideIcon;
 };
 
-export const SPREADSHEET_ID = "1awYVw19Y0gT8RhTBpmBSrkJF_1SiEtraNYgT0_DGgnc";
-
 export const MODULES: ErpModule[] = [
   { slug: "dashboard", sheet: "Dashboard", label: "Dashboard", group: "Overview", icon: LayoutDashboard },
   { slug: "company", sheet: "Company", label: "Companies", group: "Overview", icon: Building2 },
@@ -48,7 +46,11 @@ export const MODULES: ErpModule[] = [
 ];
 
 // Sheets still written/read by the invoice + stock workflow but hidden from navigation.
-export const HIDDEN_SHEETS = ["Sale Items", "Download History"];
+export const HIDDEN_SHEETS = ["Sale Items", "Download History", "Settings", "Returns"];
+
+export const ALLOWED_SHEET_TITLES = [
+  ...new Set([...MODULES.map((module) => module.sheet), ...HIDDEN_SHEETS]),
+];
 
 
 export const getModuleBySlug = (slug: string) => MODULES.find((m) => m.slug === slug);
