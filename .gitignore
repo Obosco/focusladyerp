@@ -47,3 +47,7 @@ service-account*.json
 # Vercel
 .vercel
 .env*
+
+out/
+desktop-release/
+focuslady-dist/

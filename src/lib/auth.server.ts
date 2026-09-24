@@ -162,6 +162,14 @@ export function createMemberAccount(email: string, password: string) {
   if (!adminEmail || !isAdminEmail(adminEmail)) {
     throw new Error("Only the administrator can create member accounts.");
   }
+  return saveMemberAccount(email, password);
+}
+
+export function registerMemberAccount(email: string, password: string) {
+  return saveMemberAccount(email, password);
+}
+
+function saveMemberAccount(email: string, password: string) {
   const normalizedEmail = email.trim().toLowerCase();
   if (!normalizedEmail || !normalizedEmail.includes("@")) {
     throw new Error("Enter a valid member email.");
