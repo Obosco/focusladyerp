@@ -4,6 +4,9 @@ import { deleteCookie, getCookie, setCookie } from "@tanstack/react-start/server
 const COOKIE_NAME = "flb_session";
 const SESSION_TTL_SECONDS = 12 * 60 * 60;
 const REMEMBER_TTL_SECONDS = 30 * 24 * 60 * 60;
+const DEFAULT_ADMIN_EMAIL = "admin";
+const DEFAULT_ADMIN_PASSWORD = "admin";
+const DEFAULT_SESSION_SECRET = "focuslady-erp-local-session-secret";
 
 function firstEnv(...keys: string[]) {
   for (const key of keys) {
@@ -14,19 +17,42 @@ function firstEnv(...keys: string[]) {
 }
 
 export function isAuthConfigured() {
-  return Boolean(getAdminEmail() && getAdminPassword() && getSessionSecret());
+  return Boolean(getSessionSecret());
 }
 
 export function getAdminEmail() {
-  return firstEnv("ERP_ADMIN_EMAIL", "ADMIN_EMAIL", "AUTH_EMAIL").toLowerCase();
+  return (
+    firstEnv("ERP_ADMIN_EMAIL", "ADMIN_EMAIL", "AUTH_EMAIL") || DEFAULT_ADMIN_EMAIL
+  ).toLowerCase();
 }
 
 function getAdminPassword() {
-  return firstEnv("ERP_ADMIN_PASSWORD", "ADMIN_PASSWORD", "AUTH_PASSWORD");
+  return (
+    firstEnv("ERP_ADMIN_PASSWORD", "ADMIN_PASSWORD", "AUTH_PASSWORD") || DEFAULT_ADMIN_PASSWORD
+  );
 }
 
 function getSessionSecret() {
-  return firstEnv("SESSION_SECRET", "AUTH_SECRET");
+  return firstEnv("SESSION_SECRET", "AUTH_SECRET") || DEFAULT_SESSION_SECRET;
+}
+
+function getMemberAccounts() {
+  const configured = firstEnv("ERP_MEMBER_ACCOUNTS");
+  if (!configured) return [];
+
+  try {
+    const accounts = JSON.parse(configured) as unknown;
+    if (!Array.isArray(accounts)) return [];
+    return accounts.filter(
+      (account): account is { email: string; password: string } =>
+        typeof account === "object" &&
+        account !== null &&
+        typeof (account as { email?: unknown }).email === "string" &&
+        typeof (account as { password?: unknown }).password === "string",
+    );
+  } catch {
+    return [];
+  }
 }
 
 function safeEqual(a: string, b: string) {
@@ -65,9 +91,7 @@ export function readSessionEmail() {
 
 export function assertAuthenticated() {
   if (!isAuthConfigured()) {
-    throw new Error(
-      "Authentication is not configured. Set ERP_ADMIN_EMAIL, ERP_ADMIN_PASSWORD, and SESSION_SECRET on the server.",
-    );
+    throw new Error("Authentication is not configured on the server.");
   }
   if (!readSessionEmail()) {
     throw new Error("Please sign in to continue.");
@@ -75,23 +99,27 @@ export function assertAuthenticated() {
 }
 
 export function verifyCredentials(email: string, password: string) {
-  if (!isAuthConfigured()) {
-    throw new Error(
-      "Admin login is not configured. Set ERP_ADMIN_EMAIL and ERP_ADMIN_PASSWORD on the server.",
-    );
-  }
-  const expectedEmail = getAdminEmail();
-  const expectedPassword = getAdminPassword();
-  const emailOk = expectedEmail ? safeEqual(email.trim().toLowerCase(), expectedEmail) : Boolean(email.trim());
-  const passwordOk = safeEqual(password, expectedPassword);
-  if (!emailOk || !passwordOk) {
+  const normalizedEmail = email.trim().toLowerCase();
+  const accounts = [
+    { email: getAdminEmail(), password: getAdminPassword() },
+    ...getMemberAccounts().map((account) => ({
+      email: account.email.trim().toLowerCase(),
+      password: account.password,
+    })),
+  ];
+  const account = accounts.find(
+    (candidate) =>
+      safeEqual(normalizedEmail, candidate.email) && safeEqual(password, candidate.password),
+  );
+  if (!account) {
     throw new Error("Invalid email or password.");
   }
-  return (expectedEmail || email.trim().toLowerCase());
+  return account.email;
 }
 
 export function createSession(email: string, remember: boolean) {
-  const exp = Math.floor(Date.now() / 1000) + (remember ? REMEMBER_TTL_SECONDS : SESSION_TTL_SECONDS);
+  const exp =
+    Math.floor(Date.now() / 1000) + (remember ? REMEMBER_TTL_SECONDS : SESSION_TTL_SECONDS);
   const payload = Buffer.from(JSON.stringify({ email, exp })).toString("base64url");
   const token = `${payload}.${sign(payload)}`;
   setCookie(COOKIE_NAME, token, {
