@@ -11,10 +11,11 @@ function ResetPasswordPage() {
       <div className="w-full max-w-md rounded-lg border border-border bg-card p-6 text-center shadow-sm">
         <h1 className="text-2xl font-semibold tracking-tight">Password reset</h1>
         <p className="mt-3 text-sm text-muted-foreground">
-          Password reset is not required. Open the ERP directly.
+          Ask the administrator to reset the account password in the server settings. Member
+          accounts are managed with ERP_MEMBER_ACCOUNTS.
         </p>
         <Button className="mt-6" asChild>
-          <a href="/">Return to dashboard</a>
+          <a href="/auth">Return to login</a>
         </Button>
       </div>
     </main>
