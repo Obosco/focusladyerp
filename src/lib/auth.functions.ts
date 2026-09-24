@@ -7,6 +7,7 @@ import {
   isAdminEmail,
   listMemberAccounts,
   readSessionEmail,
+  registerMemberAccount,
   resetMemberPassword,
   verifyCredentials,
 } from "./auth.server";
@@ -32,6 +33,10 @@ export const signIn = createServerFn({ method: "POST" })
     createSession(email, Boolean(data.remember));
     return { email };
   });
+
+export const createAccount = createServerFn({ method: "POST" })
+  .validator((data: { email: string; password: string }) => data)
+  .handler(async ({ data }) => registerMemberAccount(data.email, data.password));
 
 export const signOut = createServerFn({ method: "POST" }).handler(async () => {
   clearSession();
