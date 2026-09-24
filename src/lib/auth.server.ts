@@ -1,4 +1,6 @@
 import { createHmac, timingSafeEqual } from "node:crypto";
+import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
+import { join } from "node:path";
 import { deleteCookie, getCookie, setCookie } from "@tanstack/react-start/server";
 
 const COOKIE_NAME = "flb_session";
@@ -7,6 +9,9 @@ const REMEMBER_TTL_SECONDS = 30 * 24 * 60 * 60;
 const DEFAULT_ADMIN_EMAIL = "admin";
 const DEFAULT_ADMIN_PASSWORD = "admin";
 const DEFAULT_SESSION_SECRET = "focuslady-erp-local-session-secret";
+const MANAGED_MEMBERS_FILE = join(process.cwd(), ".data", "erp-members.json");
+
+type MemberAccount = { email: string; password: string };
 
 function firstEnv(...keys: string[]) {
   for (const key of keys) {
@@ -38,13 +43,35 @@ function getSessionSecret() {
 
 function getMemberAccounts() {
   const configured = firstEnv("ERP_MEMBER_ACCOUNTS");
-  if (!configured) return [];
+  const managedMembers = readManagedMembers();
+  if (!configured) return managedMembers;
 
   try {
     const accounts = JSON.parse(configured) as unknown;
+    if (!Array.isArray(accounts)) return managedMembers;
+    const environmentMembers = accounts.filter(
+      (account): account is { email: string; password: string } =>
+        typeof account === "object" &&
+        account !== null &&
+        typeof (account as { email?: unknown }).email === "string" &&
+        typeof (account as { password?: unknown }).password === "string",
+    );
+    const managedEmails = new Set(managedMembers.map((account) => account.email.toLowerCase()));
+    return [
+      ...managedMembers,
+      ...environmentMembers.filter((account) => !managedEmails.has(account.email.toLowerCase())),
+    ];
+  } catch {
+    return managedMembers;
+  }
+}
+
+function readManagedMembers(): MemberAccount[] {
+  try {
+    const accounts = JSON.parse(readFileSync(MANAGED_MEMBERS_FILE, "utf8")) as unknown;
     if (!Array.isArray(accounts)) return [];
     return accounts.filter(
-      (account): account is { email: string; password: string } =>
+      (account): account is MemberAccount =>
         typeof account === "object" &&
         account !== null &&
         typeof (account as { email?: unknown }).email === "string" &&
@@ -53,6 +80,11 @@ function getMemberAccounts() {
   } catch {
     return [];
   }
+}
+
+function writeManagedMembers(accounts: MemberAccount[]) {
+  mkdirSync(join(process.cwd(), ".data"), { recursive: true });
+  writeFileSync(MANAGED_MEMBERS_FILE, JSON.stringify(accounts, null, 2), "utf8");
 }
 
 function safeEqual(a: string, b: string) {
@@ -115,6 +147,53 @@ export function verifyCredentials(email: string, password: string) {
     throw new Error("Invalid email or password.");
   }
   return account.email;
+}
+
+export function isAdminEmail(email: string) {
+  return safeEqual(email.trim().toLowerCase(), getAdminEmail());
+}
+
+export function listMemberAccounts() {
+  return getMemberAccounts().map((account) => ({ email: account.email }));
+}
+
+export function createMemberAccount(email: string, password: string) {
+  const adminEmail = readSessionEmail();
+  if (!adminEmail || !isAdminEmail(adminEmail)) {
+    throw new Error("Only the administrator can create member accounts.");
+  }
+  const normalizedEmail = email.trim().toLowerCase();
+  if (!normalizedEmail || !normalizedEmail.includes("@")) {
+    throw new Error("Enter a valid member email.");
+  }
+  if (password.length < 8) {
+    throw new Error("Member passwords must be at least 8 characters.");
+  }
+  if (
+    isAdminEmail(normalizedEmail) ||
+    getMemberAccounts().some((account) => account.email.toLowerCase() === normalizedEmail)
+  ) {
+    throw new Error("That account already exists.");
+  }
+  writeManagedMembers([...readManagedMembers(), { email: normalizedEmail, password }]);
+  return { email: normalizedEmail };
+}
+
+export function resetMemberPassword(email: string, password: string) {
+  const adminEmail = readSessionEmail();
+  if (!adminEmail || !isAdminEmail(adminEmail)) {
+    throw new Error("Only the administrator can reset member passwords.");
+  }
+  if (password.length < 8) {
+    throw new Error("Passwords must be at least 8 characters.");
+  }
+  const normalizedEmail = email.trim().toLowerCase();
+  const members = readManagedMembers();
+  const index = members.findIndex((account) => account.email.toLowerCase() === normalizedEmail);
+  if (index < 0) throw new Error("Managed member account not found.");
+  members[index] = { email: normalizedEmail, password };
+  writeManagedMembers(members);
+  return { email: normalizedEmail };
 }
 
 export function createSession(email: string, remember: boolean) {

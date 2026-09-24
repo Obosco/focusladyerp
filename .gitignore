@@ -11,6 +11,7 @@ node_modules
 dist
 dist-ssr
 .output
+.data/
 .vinxi
 .tanstack/**
 .nitro

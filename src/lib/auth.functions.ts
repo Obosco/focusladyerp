@@ -3,7 +3,11 @@ import {
   clearSession,
   createSession,
   isAuthConfigured,
+  createMemberAccount,
+  isAdminEmail,
+  listMemberAccounts,
   readSessionEmail,
+  resetMemberPassword,
   verifyCredentials,
 } from "./auth.server";
 
@@ -14,6 +18,7 @@ export const getAuthSession = createServerFn({ method: "GET" }).handler(async ()
     required,
     email: email || null,
     signedIn: Boolean(email) && isAuthConfigured(),
+    isAdmin: Boolean(email) && isAdminEmail(email),
   };
 });
 
@@ -32,3 +37,15 @@ export const signOut = createServerFn({ method: "POST" }).handler(async () => {
   clearSession();
   return { ok: true };
 });
+
+export const getMemberAccounts = createServerFn({ method: "GET" }).handler(async () => {
+  return { accounts: listMemberAccounts() };
+});
+
+export const addMemberAccount = createServerFn({ method: "POST" })
+  .validator((data: { email: string; password: string }) => data)
+  .handler(async ({ data }) => createMemberAccount(data.email, data.password));
+
+export const changeMemberPassword = createServerFn({ method: "POST" })
+  .validator((data: { email: string; password: string }) => data)
+  .handler(async ({ data }) => resetMemberPassword(data.email, data.password));
