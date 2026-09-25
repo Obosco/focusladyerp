@@ -86,8 +86,54 @@ function assertAllowedRange(range: string) {
   }
 }
 
+function columnLabel(index: number) {
+  let label = "";
+  let value = index;
+  while (value > 0) {
+    const remainder = (value - 1) % 26;
+    label = String.fromCharCode(65 + remainder) + label;
+    value = Math.floor((value - 1) / 26);
+  }
+  return label;
+}
+
 function encodeBase64Url(value: string) {
   return Buffer.from(value).toString("base64url");
+}
+
+export async function ensureSheet(title: string, header: string[] = []) {
+  const normalized = title.trim();
+  if (!normalized) return;
+  if (!ALLOWED_SHEET_TITLES.includes(normalized)) {
+    throw new Error(`That worksheet is not available to this ERP: ${normalized}`);
+  }
+
+  try {
+    await readRange(`${normalized}!A1`);
+    return;
+  } catch {
+    // fall through and create the worksheet server-side when missing.
+  }
+
+  const result = await sheetsRequest<{ replies?: { addSheet?: { properties?: { title?: string } } }[] }>(
+    `:batchUpdate`,
+    {
+      method: "POST",
+      body: JSON.stringify({
+        requests: [{ addSheet: { properties: { title: normalized, gridProperties: { rowCount: 2000, columnCount: 30 } } } }],
+      }),
+    },
+  );
+
+  const created = result.replies?.[0]?.addSheet?.properties?.title;
+  if (!created && header.length === 0) {
+    throw new Error(`Failed to create the ${normalized} worksheet.`);
+  }
+
+  if (header.length > 0) {
+    const lastColumn = columnLabel(header.length);
+    await updateRange(`${normalized}!A1:${lastColumn}1`, [header]);
+  }
 }
 
 let cachedAccessToken: { token: string; exp: number } | undefined;

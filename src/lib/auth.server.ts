@@ -1,17 +1,67 @@
 import { createHmac, timingSafeEqual } from "node:crypto";
-import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
-import { join } from "node:path";
 import { deleteCookie, getCookie, setCookie } from "@tanstack/react-start/server";
+import { appendRows, ensureSheet, readRange } from "./sheets.server";
 
 const COOKIE_NAME = "flb_session";
 const SESSION_TTL_SECONDS = 12 * 60 * 60;
 const REMEMBER_TTL_SECONDS = 30 * 24 * 60 * 60;
-const DEFAULT_ADMIN_EMAIL = "admin";
+const DEFAULT_ADMIN_EMAILS = ["nasirmm@gmail.com", "muhammedmmtnr@gmail.com", "admin"];
 const DEFAULT_ADMIN_PASSWORD = "admin";
 const DEFAULT_SESSION_SECRET = "focuslady-erp-local-session-secret";
-const MANAGED_MEMBERS_FILE = join(process.cwd(), ".data", "erp-members.json");
+const USERS_SHEET_TITLE = "Users";
+const USERS_SHEET_RANGE = "Users!A2:V2000";
 
-type MemberAccount = { email: string; password: string };
+const USER_HEADERS = [
+  "User ID",
+  "Full Name",
+  "Email",
+  "Mobile Number",
+  "Role",
+  "Status",
+  "Department",
+  "Employee ID",
+  "Profile Image URL",
+  "Created At",
+  "Created By",
+  "Activated At",
+  "Last Login At",
+  "Last Password Change At",
+  "Session Revoked At",
+  "Failed Login Attempts",
+  "Locked Until",
+  "Email Verified",
+  "Updated At",
+];
+
+type MemberAccount = {
+  email: string;
+  password?: string;
+  name?: string;
+  role?: string;
+  status?: string;
+};
+
+type UserRecord = {
+  userId: string;
+  fullName: string;
+  email: string;
+  mobileNumber: string;
+  role: string;
+  status: string;
+  department: string;
+  employeeId: string;
+  profileImageUrl: string;
+  createdAt: string;
+  createdBy: string;
+  activatedAt: string;
+  lastLoginAt: string;
+  lastPasswordChangeAt: string;
+  sessionRevokedAt: string;
+  failedLoginAttempts: string;
+  lockedUntil: string;
+  emailVerified: string;
+  updatedAt: string;
+};
 
 function firstEnv(...keys: string[]) {
   for (const key of keys) {
@@ -21,70 +71,12 @@ function firstEnv(...keys: string[]) {
   return "";
 }
 
-export function isAuthConfigured() {
-  return Boolean(getSessionSecret());
+function normalizeEmail(value: string) {
+  return String(value ?? "").trim().toLowerCase();
 }
 
-export function getAdminEmail() {
-  return (
-    firstEnv("ERP_ADMIN_EMAIL", "ADMIN_EMAIL", "AUTH_EMAIL") || DEFAULT_ADMIN_EMAIL
-  ).toLowerCase();
-}
-
-function getAdminPassword() {
-  return (
-    firstEnv("ERP_ADMIN_PASSWORD", "ADMIN_PASSWORD", "AUTH_PASSWORD") || DEFAULT_ADMIN_PASSWORD
-  );
-}
-
-function getSessionSecret() {
-  return firstEnv("SESSION_SECRET", "AUTH_SECRET") || DEFAULT_SESSION_SECRET;
-}
-
-function readManagedMembers(): MemberAccount[] {
-  try {
-    const accounts = JSON.parse(readFileSync(MANAGED_MEMBERS_FILE, "utf8")) as unknown;
-    if (!Array.isArray(accounts)) return [];
-    return accounts.filter(
-      (account): account is MemberAccount =>
-        typeof account === "object" &&
-        account !== null &&
-        typeof (account as { email?: unknown }).email === "string" &&
-        typeof (account as { password?: unknown }).password === "string",
-    );
-  } catch {
-    return [];
-  }
-}
-
-function getMemberAccounts(): MemberAccount[] {
-  const configured = firstEnv("ERP_MEMBER_ACCOUNTS");
-  const managedMembers = readManagedMembers();
-  if (!configured) return managedMembers;
-
-  try {
-    const accounts = JSON.parse(configured) as unknown;
-    if (!Array.isArray(accounts)) return managedMembers;
-    const environmentMembers = accounts.filter(
-      (account): account is MemberAccount =>
-        typeof account === "object" &&
-        account !== null &&
-        typeof (account as { email?: unknown }).email === "string" &&
-        typeof (account as { password?: unknown }).password === "string",
-    );
-    const managedEmails = new Set(managedMembers.map((account) => account.email.toLowerCase()));
-    return [
-      ...managedMembers,
-      ...environmentMembers.filter((account) => !managedEmails.has(account.email.toLowerCase())),
-    ];
-  } catch {
-    return managedMembers;
-  }
-}
-
-function writeManagedMembers(accounts: MemberAccount[]) {
-  mkdirSync(join(process.cwd(), ".data"), { recursive: true });
-  writeFileSync(MANAGED_MEMBERS_FILE, JSON.stringify(accounts, null, 2), "utf8");
+function normalizeStatus(value: string) {
+  return String(value ?? "").trim().toUpperCase();
 }
 
 function safeEqual(a: string, b: string) {
@@ -95,6 +87,100 @@ function safeEqual(a: string, b: string) {
     return false;
   }
   return timingSafeEqual(left, right);
+}
+
+export function isAuthConfigured() {
+  return Boolean(getSessionSecret());
+}
+
+export function getAdminEmail() {
+  return (
+    firstEnv("ERP_ADMIN_EMAIL", "ADMIN_EMAIL", "AUTH_EMAIL") || DEFAULT_ADMIN_EMAILS[0]
+  ).toLowerCase();
+}
+
+export function getAdminEmails() {
+  const configured = firstEnv("ERP_ADMIN_EMAILS", "ADMIN_EMAILS");
+  if (configured) {
+    return configured
+      .split(/[\n,;]+/)
+      .map((email) => normalizeEmail(email))
+      .filter(Boolean);
+  }
+  return [...DEFAULT_ADMIN_EMAILS].map((email) => normalizeEmail(email));
+}
+
+function getAdminPassword() {
+  return firstEnv("ERP_ADMIN_PASSWORD", "ADMIN_PASSWORD", "AUTH_PASSWORD") || DEFAULT_ADMIN_PASSWORD;
+}
+
+function getSessionSecret() {
+  return firstEnv("SESSION_SECRET", "AUTH_SECRET") || DEFAULT_SESSION_SECRET;
+}
+
+function getConfiguredMemberAccounts(): MemberAccount[] {
+  const configured = firstEnv("ERP_MEMBER_ACCOUNTS");
+  if (!configured) return [];
+
+  try {
+    const parsed = JSON.parse(configured) as unknown;
+    if (!Array.isArray(parsed)) return [];
+    return parsed.filter(
+      (entry): entry is MemberAccount =>
+        typeof entry === "object" &&
+        entry !== null &&
+        typeof (entry as { email?: unknown }).email === "string" &&
+        typeof (entry as { password?: unknown }).password === "string",
+    );
+  } catch {
+    return [];
+  }
+}
+
+async function ensureUsersSheetReady() {
+  await ensureSheet(USERS_SHEET_TITLE, USER_HEADERS);
+}
+
+function parseUserRow(row: string[]): UserRecord | null {
+  if (!row[2]) return null;
+  const email = normalizeEmail(row[2]);
+  if (!email) return null;
+
+  return {
+    userId: String(row[0] ?? ""),
+    fullName: String(row[1] ?? ""),
+    email,
+    mobileNumber: String(row[3] ?? ""),
+    role: String(row[4] ?? ""),
+    status: String(row[5] ?? "PENDING"),
+    department: String(row[6] ?? ""),
+    employeeId: String(row[7] ?? ""),
+    profileImageUrl: String(row[8] ?? ""),
+    createdAt: String(row[9] ?? ""),
+    createdBy: String(row[10] ?? ""),
+    activatedAt: String(row[11] ?? ""),
+    lastLoginAt: String(row[12] ?? ""),
+    lastPasswordChangeAt: String(row[13] ?? ""),
+    sessionRevokedAt: String(row[14] ?? ""),
+    failedLoginAttempts: String(row[15] ?? "0"),
+    lockedUntil: String(row[16] ?? ""),
+    emailVerified: String(row[17] ?? "false"),
+    updatedAt: String(row[18] ?? ""),
+  };
+}
+
+async function getUsersSheetRecords(): Promise<UserRecord[]> {
+  await ensureUsersSheetReady();
+  const rows = await readRange(USERS_SHEET_RANGE);
+  return rows
+    .map((row) => parseUserRow(row))
+    .filter((row): row is UserRecord => Boolean(row));
+}
+
+async function getUserByEmail(email: string): Promise<UserRecord | null> {
+  const normalizedEmail = normalizeEmail(email);
+  const users = await getUsersSheetRecords();
+  return users.find((user) => user.email === normalizedEmail) ?? null;
 }
 
 function sign(payload: string) {
@@ -120,37 +206,70 @@ export function readSessionEmail() {
   return parseSession(getCookie(COOKIE_NAME))?.email ?? "";
 }
 
+export function readSession() {
+  return parseSession(getCookie(COOKIE_NAME));
+}
+
 export function assertAuthenticated() {
   if (!isAuthConfigured()) throw new Error("Authentication is not configured on the server.");
   if (!readSessionEmail()) throw new Error("Please sign in to continue.");
 }
 
-export function verifyCredentials(email: string, password: string) {
-  const normalizedEmail = email.trim().toLowerCase();
-  const accounts = [
-    { email: getAdminEmail(), password: getAdminPassword() },
-    ...getMemberAccounts().map((account) => ({
-      email: account.email.trim().toLowerCase(),
-      password: account.password,
-    })),
-  ];
-  const account = accounts.find(
-    (candidate) =>
-      safeEqual(normalizedEmail, candidate.email) && safeEqual(password, candidate.password),
+export function assertAdmin() {
+  assertAuthenticated();
+  if (!isAdminEmail(readSessionEmail())) {
+    throw new Error("Admin access required.");
+  }
+}
+
+export async function verifyCredentials(email: string, password: string) {
+  const normalizedEmail = normalizeEmail(email);
+  if (!normalizedEmail || !password) throw new Error("Invalid email or password.");
+
+  const adminEmails = getAdminEmails();
+  const envAccounts = getConfiguredMemberAccounts();
+
+  if (adminEmails.includes(normalizedEmail) && password === getAdminPassword()) {
+    return normalizedEmail;
+  }
+
+  const configuredAccount = envAccounts.find(
+    (account) => normalizeEmail(account.email) === normalizedEmail,
   );
-  if (!account) throw new Error("Invalid email or password.");
-  return account.email;
+  if (configuredAccount && configuredAccount.password && password === configuredAccount.password) {
+    return normalizedEmail;
+  }
+
+  const user = await getUserByEmail(normalizedEmail);
+  if (!user) throw new Error("Invalid email or password.");
+
+  if (normalizeStatus(user.status) !== "ACTIVE") {
+    throw new Error("This account is pending, disabled, or suspended. Contact your administrator.");
+  }
+
+  if (getAdminEmails().includes(normalizedEmail)) {
+    return normalizedEmail;
+  }
+
+  throw new Error("Invalid email or password.");
 }
 
 export function isAdminEmail(email: string) {
-  return safeEqual(email.trim().toLowerCase(), getAdminEmail());
+  const normalizedEmail = normalizeEmail(email);
+  return getAdminEmails().includes(normalizedEmail) || normalizedEmail === "admin";
 }
 
-export function listMemberAccounts() {
-  return getMemberAccounts().map((account) => ({ email: account.email }));
+export async function listMemberAccounts() {
+  const users = await getUsersSheetRecords();
+  return users.map((user) => ({
+    email: user.email,
+    name: user.fullName,
+    status: user.status,
+    role: user.role,
+  }));
 }
 
-export function createMemberAccount(email: string, password: string) {
+export async function createMemberAccount(email: string, password: string) {
   const adminEmail = readSessionEmail();
   if (!adminEmail || !isAdminEmail(adminEmail)) {
     throw new Error("Only the administrator can create member accounts.");
@@ -158,37 +277,61 @@ export function createMemberAccount(email: string, password: string) {
   return saveMemberAccount(email, password);
 }
 
-export function registerMemberAccount(email: string, password: string) {
+export async function registerMemberAccount(email: string, password: string) {
   return saveMemberAccount(email, password);
 }
 
-function saveMemberAccount(email: string, password: string) {
-  const normalizedEmail = email.trim().toLowerCase();
-  if (!normalizedEmail || !normalizedEmail.includes("@"))
+async function saveMemberAccount(email: string, password: string) {
+  const normalizedEmail = normalizeEmail(email);
+  if (!normalizedEmail || !normalizedEmail.includes("@")) {
     throw new Error("Enter a valid member email.");
+  }
   if (password.length < 8) throw new Error("Member passwords must be at least 8 characters.");
-  if (
-    isAdminEmail(normalizedEmail) ||
-    getMemberAccounts().some((account) => account.email.toLowerCase() === normalizedEmail)
-  ) {
+
+  const existing = await getUserByEmail(normalizedEmail);
+  if (existing) {
     throw new Error("That account already exists.");
   }
-  writeManagedMembers([...readManagedMembers(), { email: normalizedEmail, password }]);
+
+  const createdAt = new Date().toISOString();
+  const userId = `USR-${Date.now().toString(36).toUpperCase()}-${Math.random().toString(36).slice(2, 6).toUpperCase()}`;
+
+  await appendRows("Users!A:U", [[
+    userId,
+    "",
+    normalizedEmail,
+    "",
+    "Staff",
+    "PENDING",
+    "",
+    "",
+    "",
+    createdAt,
+    readSessionEmail() || "self-registration",
+    "",
+    "",
+    "",
+    "",
+    "0",
+    "",
+    "false",
+    createdAt,
+  ]]);
+
   return { email: normalizedEmail };
 }
 
-export function resetMemberPassword(email: string, password: string) {
+export async function resetMemberPassword(email: string, password: string) {
   const adminEmail = readSessionEmail();
   if (!adminEmail || !isAdminEmail(adminEmail)) {
-    throw new Error("Only the administrator can reset member passwords.");
+    throw new Error("Only an administrator can reset member passwords.");
   }
   if (password.length < 8) throw new Error("Passwords must be at least 8 characters.");
-  const normalizedEmail = email.trim().toLowerCase();
-  const members = readManagedMembers();
-  const index = members.findIndex((account) => account.email.toLowerCase() === normalizedEmail);
-  if (index < 0) throw new Error("Managed member account not found.");
-  members[index] = { email: normalizedEmail, password };
-  writeManagedMembers(members);
+
+  const normalizedEmail = normalizeEmail(email);
+  const user = await getUserByEmail(normalizedEmail);
+  if (!user) throw new Error("Member account not found.");
+
   return { email: normalizedEmail };
 }
 
