@@ -21,7 +21,7 @@ import { getSheetsConnection } from "@/lib/sheets.functions";
 
 function NavItem({ mod, active }: { mod: ErpModule; active: boolean }) {
   const Icon = mod.icon;
-  const to = mod.slug === "dashboard" ? "/" : `/sheet/${mod.slug}`;
+  const to = mod.path ?? (mod.slug === "dashboard" ? "/" : `/sheet/${mod.slug}`);
   return (
     <Link
       to={to}
