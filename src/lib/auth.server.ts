@@ -41,31 +41,6 @@ function getSessionSecret() {
   return firstEnv("SESSION_SECRET", "AUTH_SECRET") || DEFAULT_SESSION_SECRET;
 }
 
-function getMemberAccounts() {
-  const configured = firstEnv("ERP_MEMBER_ACCOUNTS");
-  const managedMembers = readManagedMembers();
-  if (!configured) return managedMembers;
-
-  try {
-    const accounts = JSON.parse(configured) as unknown;
-    if (!Array.isArray(accounts)) return managedMembers;
-    const environmentMembers = accounts.filter(
-      (account): account is { email: string; password: string } =>
-        typeof account === "object" &&
-        account !== null &&
-        typeof (account as { email?: unknown }).email === "string" &&
-        typeof (account as { password?: unknown }).password === "string",
-    );
-    const managedEmails = new Set(managedMembers.map((account) => account.email.toLowerCase()));
-    return [
-      ...managedMembers,
-      ...environmentMembers.filter((account) => !managedEmails.has(account.email.toLowerCase())),
-    ];
-  } catch {
-    return managedMembers;
-  }
-}
-
 function readManagedMembers(): MemberAccount[] {
   try {
     const accounts = JSON.parse(readFileSync(MANAGED_MEMBERS_FILE, "utf8")) as unknown;
@@ -79,6 +54,31 @@ function readManagedMembers(): MemberAccount[] {
     );
   } catch {
     return [];
+  }
+}
+
+function getMemberAccounts(): MemberAccount[] {
+  const configured = firstEnv("ERP_MEMBER_ACCOUNTS");
+  const managedMembers = readManagedMembers();
+  if (!configured) return managedMembers;
+
+  try {
+    const accounts = JSON.parse(configured) as unknown;
+    if (!Array.isArray(accounts)) return managedMembers;
+    const environmentMembers = accounts.filter(
+      (account): account is MemberAccount =>
+        typeof account === "object" &&
+        account !== null &&
+        typeof (account as { email?: unknown }).email === "string" &&
+        typeof (account as { password?: unknown }).password === "string",
+    );
+    const managedEmails = new Set(managedMembers.map((account) => account.email.toLowerCase()));
+    return [
+      ...managedMembers,
+      ...environmentMembers.filter((account) => !managedEmails.has(account.email.toLowerCase())),
+    ];
+  } catch {
+    return managedMembers;
   }
 }
 
@@ -106,8 +106,7 @@ type SessionPayload = { email: string; exp: number };
 function parseSession(token: string | undefined): SessionPayload | null {
   if (!token) return null;
   const [payload, signature] = token.split(".");
-  if (!payload || !signature) return null;
-  if (!safeEqual(sign(payload), signature)) return null;
+  if (!payload || !signature || !safeEqual(sign(payload), signature)) return null;
   try {
     const data = JSON.parse(Buffer.from(payload, "base64url").toString("utf8")) as SessionPayload;
     if (!data.email || typeof data.exp !== "number" || data.exp * 1000 < Date.now()) return null;
@@ -122,12 +121,8 @@ export function readSessionEmail() {
 }
 
 export function assertAuthenticated() {
-  if (!isAuthConfigured()) {
-    throw new Error("Authentication is not configured on the server.");
-  }
-  if (!readSessionEmail()) {
-    throw new Error("Please sign in to continue.");
-  }
+  if (!isAuthConfigured()) throw new Error("Authentication is not configured on the server.");
+  if (!readSessionEmail()) throw new Error("Please sign in to continue.");
 }
 
 export function verifyCredentials(email: string, password: string) {
@@ -143,9 +138,7 @@ export function verifyCredentials(email: string, password: string) {
     (candidate) =>
       safeEqual(normalizedEmail, candidate.email) && safeEqual(password, candidate.password),
   );
-  if (!account) {
-    throw new Error("Invalid email or password.");
-  }
+  if (!account) throw new Error("Invalid email or password.");
   return account.email;
 }
 
@@ -171,12 +164,9 @@ export function registerMemberAccount(email: string, password: string) {
 
 function saveMemberAccount(email: string, password: string) {
   const normalizedEmail = email.trim().toLowerCase();
-  if (!normalizedEmail || !normalizedEmail.includes("@")) {
+  if (!normalizedEmail || !normalizedEmail.includes("@"))
     throw new Error("Enter a valid member email.");
-  }
-  if (password.length < 8) {
-    throw new Error("Member passwords must be at least 8 characters.");
-  }
+  if (password.length < 8) throw new Error("Member passwords must be at least 8 characters.");
   if (
     isAdminEmail(normalizedEmail) ||
     getMemberAccounts().some((account) => account.email.toLowerCase() === normalizedEmail)
@@ -192,9 +182,7 @@ export function resetMemberPassword(email: string, password: string) {
   if (!adminEmail || !isAdminEmail(adminEmail)) {
     throw new Error("Only the administrator can reset member passwords.");
   }
-  if (password.length < 8) {
-    throw new Error("Passwords must be at least 8 characters.");
-  }
+  if (password.length < 8) throw new Error("Passwords must be at least 8 characters.");
   const normalizedEmail = email.trim().toLowerCase();
   const members = readManagedMembers();
   const index = members.findIndex((account) => account.email.toLowerCase() === normalizedEmail);
