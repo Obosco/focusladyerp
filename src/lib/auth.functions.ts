@@ -29,7 +29,7 @@ export const signIn = createServerFn({ method: "POST" })
     return data;
   })
   .handler(async ({ data }) => {
-    const email = verifyCredentials(data.email, data.password);
+    const email = await verifyCredentials(data.email, data.password);
     createSession(email, Boolean(data.remember));
     return { email };
   });
@@ -44,7 +44,7 @@ export const signOut = createServerFn({ method: "POST" }).handler(async () => {
 });
 
 export const getMemberAccounts = createServerFn({ method: "GET" }).handler(async () => {
-  return { accounts: listMemberAccounts() };
+  return { accounts: await listMemberAccounts() };
 });
 
 export const addMemberAccount = createServerFn({ method: "POST" })

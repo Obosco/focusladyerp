@@ -46,7 +46,13 @@ export const MODULES: ErpModule[] = [
 ];
 
 // Sheets still written/read by the invoice + stock workflow but hidden from navigation.
-export const HIDDEN_SHEETS = ["Sale Items", "Download History", "Settings", "Returns"];
+export const HIDDEN_SHEETS = [
+  "Sale Items",
+  "Download History",
+  "Settings",
+  "Returns",
+  "Users",
+];
 
 export const ALLOWED_SHEET_TITLES = [
   ...new Set([...MODULES.map((module) => module.sheet), ...HIDDEN_SHEETS]),
