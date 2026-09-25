@@ -806,7 +806,7 @@ export type ReturnInput = {
 };
 
 export type StockMovementInput = {
-  barcode: string;
+  barcode?: string;
   product?: string;
   variant?: string;
   sku?: string;
@@ -820,12 +820,12 @@ export type StockMovementInput = {
 export async function recordStockMovement(input: StockMovementInput) {
   await ensureSheet("Stock", DEFAULT_SHEET_HEADERS.Stock);
   const qty = Number(input.quantity ?? 0);
-  if (!input.barcode.trim()) throw new Error("Barcode is required.");
+  const barcode = String(input.barcode ?? "").trim();
   if (!Number.isFinite(qty) || qty <= 0) throw new Error("Quantity must be greater than zero.");
 
   await appendRows("Stock!A:F", [[
     input.product ?? "Unknown Product",
-    input.barcode,
+    barcode,
     String(qty),
     input.movementType,
     input.variant ?? "",
@@ -834,7 +834,7 @@ export async function recordStockMovement(input: StockMovementInput) {
 
   return {
     ok: true,
-    barcode: input.barcode,
+    barcode,
     movementType: input.movementType,
     quantity: qty,
     warehouse: input.warehouse ?? "Main Store",

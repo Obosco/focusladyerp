@@ -213,6 +213,7 @@ export function BarcodeLookup({
     costPrice: string;
     unit: string;
   };
+  emptyMessage?: string;
 }) {
   if (!match) {
     return (

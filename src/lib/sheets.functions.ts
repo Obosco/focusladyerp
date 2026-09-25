@@ -107,6 +107,7 @@ export const saveErpSettings = createServerFn({ method: "POST" })
       defaultGstPercent: Number(data.defaultGstPercent) || 0,
       reorderThreshold: Number(data.reorderThreshold) || 0,
       whatsappCountryCode: String(data.whatsappCountryCode ?? "91").replace(/\D/g, "") || "91",
+      allowNegativeStock: data.allowNegativeStock === true,
     }),
   );
 
@@ -149,7 +150,9 @@ export const createReturn = createServerFn({ method: "POST" })
 export const updateStockLevel = createServerFn({ method: "POST" })
   .middleware([requireAuth])
   .validator((data: StockMovementInput) => {
-    requiredText(data?.barcode, "Barcode", 120);
+    if (data.barcode !== undefined && data.barcode !== null && data.barcode !== "") {
+      requiredText(data.barcode, "Barcode", 120);
+    }
     boundedNumber(data.quantity, "Quantity", 0.0001, 1_000_000);
     if (!data.movementType || !["Stock In", "Stock Out", "Adjustment"].includes(data.movementType)) {
       throw new Error("Movement type is required.");
