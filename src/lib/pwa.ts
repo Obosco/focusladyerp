@@ -88,10 +88,11 @@ function precacheLoadedAssets() {
 }
 
 function promptToReload(waiting: ServiceWorker) {
-  toast("A new version is available", {
+  toast("Update available", {
+    description: "A newer Focus Lady ERP version is ready. Update now to refresh to the latest build.",
     duration: Infinity,
     action: {
-      label: "Reload",
+      label: "Update now",
       onClick: () => {
         navigator.serviceWorker.addEventListener(
           "controllerchange",
@@ -102,6 +103,19 @@ function promptToReload(waiting: ServiceWorker) {
       },
     },
   });
+}
+
+async function checkForOnlineUpdates() {
+  if (typeof window === "undefined" || !("serviceWorker" in navigator) || !navigator.onLine) return;
+
+  try {
+    const registrations = await navigator.serviceWorker.getRegistrations();
+    for (const registration of registrations) {
+      await registration.update();
+    }
+  } catch (error) {
+    console.warn("[pwa] Update check failed", error);
+  }
 }
 
 function watchForUpdates(registration: ServiceWorkerRegistration) {
@@ -120,7 +134,10 @@ function watchForUpdates(registration: ServiceWorkerRegistration) {
   });
 
   document.addEventListener("visibilitychange", () => {
-    if (document.visibilityState === "visible") void registration.update();
+    if (document.visibilityState === "visible") {
+      void checkForOnlineUpdates();
+      void registration.update();
+    }
   });
 }
 
@@ -133,6 +150,7 @@ export function registerServiceWorker() {
       .register(SW_URL, { scope: "/" })
       .then((registration) => {
         watchForUpdates(registration);
+        void checkForOnlineUpdates();
         precacheLoadedAssets();
       })
       .catch((error) => console.error("[pwa] Service worker registration failed", error));
@@ -141,3 +159,75 @@ export function registerServiceWorker() {
   if (document.readyState === "complete" || document.readyState === "interactive") register();
   else window.addEventListener("DOMContentLoaded", register, { once: true });
 }
+
+export function watchChunkLoadFailure() {
+  if (typeof window === "undefined") return;
+
+  let handled = false;
+  const reloadKey = "flb-erp-chunk-reload-attempted";
+
+  const recover = async () => {
+    if (handled) return;
+    handled = true;
+
+    const alreadyRetried = sessionStorage.getItem(reloadKey) === "1";
+    if (alreadyRetried) {
+      toast.error(
+        "The app could not load the latest version. Please refresh the page or check your connection.",
+        { duration: 8000 },
+      );
+      return;
+    }
+
+    sessionStorage.setItem(reloadKey, "1");
+
+    try {
+      if (navigator.onLine) {
+        const registrations = await navigator.serviceWorker.getRegistrations();
+        await Promise.all(registrations.map((registration) => registration.update()));
+      }
+
+      const cacheNames = await caches.keys();
+      await Promise.all(
+        cacheNames
+          .filter((name) => name.startsWith("flb-erp-"))
+          .map((name) => caches.delete(name)),
+      );
+
+      window.location.reload();
+    } catch (error) {
+      console.error("[pwa] Chunk reload recovery failed", error);
+      sessionStorage.removeItem(reloadKey);
+      toast.error(
+        "The app could not finish loading the latest deployment. Please refresh the page or try again in a moment.",
+        { duration: 8000 },
+      );
+    }
+  };
+
+  const isChunkIssue = (value: string) =>
+    /Loading chunk|ChunkLoadError|Failed to fetch dynamically imported module/i.test(value);
+
+  window.addEventListener(
+    "error",
+    (event) => {
+      const message = event.message || "";
+      if (!isChunkIssue(message)) return;
+      event.preventDefault();
+      void recover();
+    },
+    true,
+  );
+
+  window.addEventListener(
+    "unhandledrejection",
+    (event) => {
+      const reason = event.reason instanceof Error ? event.reason.message : String(event.reason ?? "");
+      if (!isChunkIssue(reason)) return;
+      event.preventDefault();
+      void recover();
+    },
+    true,
+  );
+}
+

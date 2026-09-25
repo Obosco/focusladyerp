@@ -59,7 +59,7 @@ function ProductNewPage() {
         },
       });
       toast.success("Product saved with barcode validation");
-      navigate({ to: "/sheet/products" });
+      navigate({ to: "/sheet/$slug", params: { slug: "products" } });
     } catch (error) {
       toast.error(error instanceof Error ? error.message : "Could not save product");
     } finally {
