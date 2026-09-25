@@ -7,7 +7,7 @@ import { Button } from "@/components/ui/button";
 import { FileText, Printer } from "lucide-react";
 import { exportInvoicePdf } from "@/lib/pdf";
 import { formatDateIndia } from "@/lib/erp-data";
-import { InvoiceBarcode } from "@/components/InvoiceBarcode";
+import { COMPANY } from "@/lib/invoice";
 
 const invoiceQuery = (invoice: string) =>
   queryOptions({
@@ -60,10 +60,16 @@ function InvoiceView({ invoice }: { invoice: string }) {
   const get = (needle: string) =>
     data.valueRanges.find((v) => v.range.includes(needle))?.values ?? [];
 
-  const head = get("Sales").find((r) => (r[0] ?? "") === invoice);
+  const salesRows = get("Sales");
+  const customerRows = get("Customers");
+  const head = salesRows.find((r) => (r[0] ?? "") === invoice);
   const items = get("Sale Items")
     .filter((r) => (r[0] ?? "") === invoice)
-    .map((r) => ({ product: r[3] ?? "", qty: num(r[4]), rate: num(r[5]) }));
+    .map((r) => ({
+      product: r[3] ?? "",
+      qty: num(r[4]),
+      rate: num(r[5]),
+    }));
 
   if (!head) {
     return (
@@ -76,17 +82,33 @@ function InvoiceView({ invoice }: { invoice: string }) {
     );
   }
 
+  const customerName = String(head[2] ?? "").trim() || "Customer";
+  const customerRow = customerRows.find(
+    (row) => String(row[1] ?? "").trim().toLowerCase() === customerName.toLowerCase(),
+  );
+
   const subtotal = num(head[3]);
   const gst = num(head[4]);
   const total = num(head[5]);
   const paid = num(head[6]);
   const dueAmt = num(head[7]);
   const gstPercent = subtotal ? Math.round((gst / subtotal) * 100) : 0;
+  const paymentStatus = String(head[8] ?? "Pending").trim() || "Pending";
+  const paymentMethod = String(head[13] ?? "").trim() || "—";
+  const dueDate = String(head[15] ?? "").trim();
+  const customerPhone = String(customerRow?.[2] ?? "").trim() || "—";
+  const customerAddress = String(head[14] ?? customerRow?.[3] ?? "").trim() || "Address unavailable";
+  const invoiceDate = formatDateIndia(head[1]);
 
   const doc = {
     invoice,
-    date: formatDateIndia(head[1]),
-    customer: head[2] ?? "",
+    date: invoiceDate,
+    customer: customerName,
+    customerPhone,
+    customerAddress,
+    paymentStatus,
+    paymentMethod,
+    dueDate,
     items,
     subtotal,
     gst,
@@ -101,7 +123,7 @@ function InvoiceView({ invoice }: { invoice: string }) {
   return (
     <div className="space-y-4">
       <div className="flex gap-2 print:hidden">
-        <Button size="sm" onClick={() => exportInvoicePdf(doc)}>
+        <Button size="sm" onClick={() => void exportInvoicePdf(doc)}>
           <FileText className="mr-2 h-4 w-4" /> Download PDF
         </Button>
         <Button variant="outline" size="sm" onClick={() => window.print()}>
@@ -112,77 +134,134 @@ function InvoiceView({ invoice }: { invoice: string }) {
         </Button>
       </div>
 
-      <div className="mx-auto max-w-3xl rounded-lg border border-border bg-card p-8">
-        <div className="flex items-start justify-between">
-          <div>
-            <div className="text-lg font-semibold tracking-tight">FOCUS LADY BRA</div>
-            <div className="text-xs text-muted-foreground">Tax Invoice</div>
+      <article id="invoice-preview" className="invoice-paper">
+        <header className="invoice-header">
+          <div className="invoice-brand">
+            <img src="/icon-512.png" alt={COMPANY.name} className="invoice-logo" />
+            <div>
+              <h1 className="invoice-company">{COMPANY.name}</h1>
+              <p className="invoice-company-meta">
+                {COMPANY.address}
+                <br />
+                {COMPANY.state} | {COMPANY.phone}
+              </p>
+            </div>
           </div>
-          <div className="text-right text-sm">
-            <div className="font-mono font-medium">{invoice}</div>
-            <div className="text-muted-foreground">{doc.date}</div>
+          <div className="invoice-heading">
+            <div className="invoice-kicker">Invoice</div>
+            <div className="invoice-number">{invoice}</div>
+            <div className="invoice-date-row">
+              <div>{doc.date}</div>
+              {dueDate ? <div>Due: {dueDate}</div> : null}
+            </div>
           </div>
-          <InvoiceBarcode value={invoice} />
-        </div>
+        </header>
 
-        <div className="mt-6 text-sm">
-          <div className="text-xs uppercase tracking-wider text-muted-foreground">
-            Billed to
+        <section className="invoice-meta">
+          <div className="invoice-meta-card">
+            <p className="invoice-section-label">Bill To</p>
+            <div className="invoice-party-name">{doc.customer}</div>
+            <p className="invoice-detail-row">
+              <strong>Phone:</strong> {customerPhone}
+            </p>
+            <p className="invoice-detail-row">
+              <strong>Address:</strong> {customerAddress}
+            </p>
           </div>
-          <div className="font-medium">{doc.customer}</div>
-        </div>
 
-        <table className="mt-6 w-full text-sm">
-          <thead className="border-b border-border text-left text-xs uppercase text-muted-foreground">
+          <div className="invoice-meta-card">
+            <p className="invoice-section-label">Invoice Information</p>
+            <p className="invoice-detail-row">
+              <strong>Invoice No:</strong> {invoice}
+            </p>
+            <p className="invoice-detail-row">
+              <strong>Invoice Date:</strong> {doc.date}
+            </p>
+            <p className="invoice-detail-row">
+              <strong>Payment Status:</strong> {paymentStatus}
+            </p>
+            <p className="invoice-detail-row">
+              <strong>Payment Method:</strong> {paymentMethod}
+            </p>
+          </div>
+        </section>
+
+        <table className="invoice-table">
+          <thead>
             <tr>
-              <th className="py-2">Product</th>
-              <th className="py-2 text-right">Qty</th>
-              <th className="py-2 text-right">Rate</th>
-              <th className="py-2 text-right">Amount</th>
+              <th>#</th>
+              <th>Product</th>
+              <th>SKU</th>
+              <th>Qty</th>
+              <th>Rate</th>
+              <th>Discount</th>
+              <th>Tax</th>
+              <th>Amount</th>
             </tr>
           </thead>
           <tbody>
-            {items.map((i, idx) => (
-              <tr key={idx} className="border-b border-border/60">
-                <td className="py-2">{i.product}</td>
-                <td className="py-2 text-right">{i.qty}</td>
-                <td className="py-2 text-right">{money(i.rate)}</td>
-                <td className="py-2 text-right">{money(i.qty * i.rate)}</td>
-              </tr>
-            ))}
+            {items.map((item, idx) => {
+              const lineTotal = item.qty * item.rate;
+              const tax = lineTotal * (gstPercent / 100);
+              return (
+                <tr key={`${item.product}-${idx}`}>
+                  <td>{idx + 1}</td>
+                  <td>{item.product}</td>
+                  <td>—</td>
+                  <td>{item.qty}</td>
+                  <td className="number-cell">{money(item.rate)}</td>
+                  <td className="number-cell">{money(0)}</td>
+                  <td className="number-cell">{money(tax)}</td>
+                  <td className="number-cell">{money(lineTotal + tax)}</td>
+                </tr>
+              );
+            })}
           </tbody>
         </table>
 
-        <div className="mt-4 ml-auto w-full max-w-xs space-y-1 text-sm">
-          <Row l="Subtotal" v={subtotal} />
-          <Row l={`GST (${gstPercent}%)`} v={gst} />
-          <Row l="Total" v={total} bold />
-          <Row l="Paid" v={paid} />
-          <Row l="Due" v={dueAmt} bold />
-        </div>
-
-        {doc.notes ? (
-          <p className="mt-6 text-xs text-muted-foreground">Notes: {doc.notes}</p>
-        ) : null}
-
-        <div className="mt-10 flex justify-end">
-          <div className="w-44 text-right">
-            {/* Blank physical signature area for printing. No digital signature is displayed or stored. */}
-            <div className="h-20 border border-dashed bg-white" />
-            <div className="mt-2 text-xs font-medium">For OBOSCO CLOTHING INDUSTRIES</div>
-            <div className="text-xs">Authorised Signatory</div>
+        <div className="invoice-summary">
+          <div className="invoice-totals">
+            <div className="invoice-totals-row">
+              <span>Subtotal</span>
+              <span>{money(subtotal)}</span>
+            </div>
+            <div className="invoice-totals-row">
+              <span>Discount</span>
+              <span>{money(0)}</span>
+            </div>
+            <div className="invoice-totals-row">
+              <span>Tax</span>
+              <span>{money(gst)}</span>
+            </div>
+            <div className="invoice-totals-row grand">
+              <span>Grand Total</span>
+              <span>{money(total)}</span>
+            </div>
           </div>
         </div>
-      </div>
-    </div>
-  );
-}
 
-function Row({ l, v, bold }: { l: string; v: number; bold?: boolean }) {
-  return (
-    <div className={`flex justify-between ${bold ? "font-semibold" : "text-muted-foreground"}`}>
-      <span>{l}</span>
-      <span>{money(v)}</span>
+        <div className="invoice-notes">
+          <div className="invoice-note-box">
+            <p className="invoice-section-label" style={{ margin: 0 }}>Payment / Notes</p>
+            <p>
+              <strong>Status:</strong> {paymentStatus}
+            </p>
+            <p>
+              <strong>Method:</strong> {paymentMethod}
+            </p>
+            {doc.notes ? <p>{doc.notes}</p> : null}
+          </div>
+          <div className="invoice-note-box">
+            <p className="invoice-section-label" style={{ margin: 0 }}>Terms & Conditions</p>
+            <p>Goods once sold are not returnable unless otherwise agreed in writing.</p>
+          </div>
+        </div>
+
+        <footer className="invoice-footer">
+          <strong>{COMPANY.name}</strong>
+          <span>Thank you for your business.</span>
+        </footer>
+      </article>
     </div>
   );
 }
