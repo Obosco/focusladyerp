@@ -340,12 +340,14 @@ export type ErpSettings = {
   defaultGstPercent: number;
   reorderThreshold: number;
   whatsappCountryCode: string;
+  allowNegativeStock: boolean;
 };
 
 const SETTINGS_DEFAULTS: ErpSettings = {
   defaultGstPercent: 0,
   reorderThreshold: 5,
   whatsappCountryCode: "91",
+  allowNegativeStock: false,
 };
 
 export async function readSettings(): Promise<ErpSettings> {
@@ -360,15 +362,18 @@ export async function readSettings(): Promise<ErpSettings> {
     reorderThreshold: num("reorder_threshold", SETTINGS_DEFAULTS.reorderThreshold),
     whatsappCountryCode:
       map.get("whatsapp_country_code") || SETTINGS_DEFAULTS.whatsappCountryCode,
+    allowNegativeStock:
+      (map.get("allow_negative_stock") ?? "false").toLowerCase() === "true",
   };
 }
 
 export async function writeSettings(s: ErpSettings) {
   await ensureSheet("Settings", DEFAULT_SHEET_HEADERS.Settings);
-  await updateRange("Settings!A2:B4", [
+  await updateRange("Settings!A2:B6", [
     ["default_gst_percent", String(s.defaultGstPercent)],
     ["reorder_threshold", String(s.reorderThreshold)],
     ["whatsapp_country_code", s.whatsappCountryCode],
+    ["allow_negative_stock", String(Boolean(s.allowNegativeStock))],
   ]);
   return s;
 }

@@ -52,11 +52,11 @@ function AuthPage() {
     <main className="flex min-h-screen items-center justify-center bg-white px-4 py-10 text-black">
       <div className="grid w-full max-w-4xl border border-black bg-white lg:grid-cols-2">
         <section className="hidden border-r border-black p-10 lg:flex lg:flex-col lg:justify-between">
-          <img src="/focus-lady-logo.svg" alt="Focus Lady Bra" className="w-56" />
+          <img src="/icon-512.png" alt="FocusLady ERP" className="w-56 object-contain" />
           <p className="text-xs uppercase tracking-[0.2em]">OBOSCO CLOTHING INDUSTRIES</p>
         </section>
         <section className="w-full max-w-md justify-self-center p-6 sm:p-10">
-          <img src="/focus-lady-logo.svg" alt="Focus Lady Bra" className="mb-6 w-44 lg:hidden" />
+          <img src="/icon-512.png" alt="FocusLady ERP" className="mb-6 w-44 object-contain lg:hidden" />
           <p className="text-xs font-semibold uppercase tracking-[0.2em]">Focus Lady Bra ERP</p>
           <h1 className="mt-2 text-2xl font-semibold">
             {mode === "login" ? "ERP Login" : "Create account"}

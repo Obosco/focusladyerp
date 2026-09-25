@@ -15,11 +15,17 @@ import { Route as ResetPasswordRouteImport } from './routes/reset-password'
 import { Route as AuthenticatedIndexRouteImport } from './routes/_authenticated/index'
 import { Route as AuthenticatedAnalyticsRouteImport } from './routes/_authenticated/analytics'
 import { Route as AuthenticatedAssistantRouteImport } from './routes/_authenticated/assistant'
+import { Route as AuthenticatedBarcodeGeneratorRouteImport } from './routes/_authenticated/barcode-generator'
+import { Route as AuthenticatedBarcodeManagementRouteImport } from './routes/_authenticated/barcode-management'
+import { Route as AuthenticatedBarcodePrintHistoryRouteImport } from './routes/_authenticated/barcode-print-history'
+import { Route as AuthenticatedBarcodeScannerRouteImport } from './routes/_authenticated/barcode-scanner'
 import { Route as AuthenticatedDownloadsRouteImport } from './routes/_authenticated/downloads'
+import { Route as AuthenticatedPosRouteImport } from './routes/_authenticated/pos'
 import { Route as AuthenticatedSettingsRouteImport } from './routes/_authenticated/settings'
 import { Route as AuthenticatedInvoicesIndexRouteImport } from './routes/_authenticated/invoices.index'
 import { Route as AuthenticatedInvoicesInvoiceRouteImport } from './routes/_authenticated/invoices.$invoice'
 import { Route as AuthenticatedInvoicesNewRouteImport } from './routes/_authenticated/invoices.new'
+import { Route as AuthenticatedProductsNewRouteImport } from './routes/_authenticated/products.new'
 import { Route as AuthenticatedSheetSlugRouteImport } from './routes/_authenticated/sheet.$slug'
 
 const AuthenticatedRouteRoute = AuthenticatedRouteRouteImport.update({
@@ -51,9 +57,38 @@ const AuthenticatedAssistantRoute = AuthenticatedAssistantRouteImport.update({
   path: '/assistant',
   getParentRoute: () => AuthenticatedRouteRoute,
 } as any)
+const AuthenticatedBarcodeGeneratorRoute =
+  AuthenticatedBarcodeGeneratorRouteImport.update({
+    id: '/barcode-generator',
+    path: '/barcode-generator',
+    getParentRoute: () => AuthenticatedRouteRoute,
+  } as any)
+const AuthenticatedBarcodeManagementRoute =
+  AuthenticatedBarcodeManagementRouteImport.update({
+    id: '/barcode-management',
+    path: '/barcode-management',
+    getParentRoute: () => AuthenticatedRouteRoute,
+  } as any)
+const AuthenticatedBarcodePrintHistoryRoute =
+  AuthenticatedBarcodePrintHistoryRouteImport.update({
+    id: '/barcode-print-history',
+    path: '/barcode-print-history',
+    getParentRoute: () => AuthenticatedRouteRoute,
+  } as any)
+const AuthenticatedBarcodeScannerRoute =
+  AuthenticatedBarcodeScannerRouteImport.update({
+    id: '/barcode-scanner',
+    path: '/barcode-scanner',
+    getParentRoute: () => AuthenticatedRouteRoute,
+  } as any)
 const AuthenticatedDownloadsRoute = AuthenticatedDownloadsRouteImport.update({
   id: '/downloads',
   path: '/downloads',
+  getParentRoute: () => AuthenticatedRouteRoute,
+} as any)
+const AuthenticatedPosRoute = AuthenticatedPosRouteImport.update({
+  id: '/pos',
+  path: '/pos',
   getParentRoute: () => AuthenticatedRouteRoute,
 } as any)
 const AuthenticatedSettingsRoute = AuthenticatedSettingsRouteImport.update({
@@ -79,6 +114,12 @@ const AuthenticatedInvoicesNewRoute =
     path: '/invoices/new',
     getParentRoute: () => AuthenticatedRouteRoute,
   } as any)
+const AuthenticatedProductsNewRoute =
+  AuthenticatedProductsNewRouteImport.update({
+    id: '/products/new',
+    path: '/products/new',
+    getParentRoute: () => AuthenticatedRouteRoute,
+  } as any)
 const AuthenticatedSheetSlugRoute = AuthenticatedSheetSlugRouteImport.update({
   id: '/sheet/$slug',
   path: '/sheet/$slug',
@@ -91,10 +132,16 @@ export interface FileRoutesByFullPath {
   '/reset-password': typeof ResetPasswordRoute
   '/analytics': typeof AuthenticatedAnalyticsRoute
   '/assistant': typeof AuthenticatedAssistantRoute
+  '/barcode-generator': typeof AuthenticatedBarcodeGeneratorRoute
+  '/barcode-management': typeof AuthenticatedBarcodeManagementRoute
+  '/barcode-print-history': typeof AuthenticatedBarcodePrintHistoryRoute
+  '/barcode-scanner': typeof AuthenticatedBarcodeScannerRoute
   '/downloads': typeof AuthenticatedDownloadsRoute
+  '/pos': typeof AuthenticatedPosRoute
   '/settings': typeof AuthenticatedSettingsRoute
   '/invoices/$invoice': typeof AuthenticatedInvoicesInvoiceRoute
   '/invoices/new': typeof AuthenticatedInvoicesNewRoute
+  '/products/new': typeof AuthenticatedProductsNewRoute
   '/sheet/$slug': typeof AuthenticatedSheetSlugRoute
   '/invoices/': typeof AuthenticatedInvoicesIndexRoute
 }
@@ -103,11 +150,17 @@ export interface FileRoutesByTo {
   '/reset-password': typeof ResetPasswordRoute
   '/analytics': typeof AuthenticatedAnalyticsRoute
   '/assistant': typeof AuthenticatedAssistantRoute
+  '/barcode-generator': typeof AuthenticatedBarcodeGeneratorRoute
+  '/barcode-management': typeof AuthenticatedBarcodeManagementRoute
+  '/barcode-print-history': typeof AuthenticatedBarcodePrintHistoryRoute
+  '/barcode-scanner': typeof AuthenticatedBarcodeScannerRoute
   '/downloads': typeof AuthenticatedDownloadsRoute
+  '/pos': typeof AuthenticatedPosRoute
   '/settings': typeof AuthenticatedSettingsRoute
   '/': typeof AuthenticatedIndexRoute
   '/invoices/$invoice': typeof AuthenticatedInvoicesInvoiceRoute
   '/invoices/new': typeof AuthenticatedInvoicesNewRoute
+  '/products/new': typeof AuthenticatedProductsNewRoute
   '/sheet/$slug': typeof AuthenticatedSheetSlugRoute
   '/invoices': typeof AuthenticatedInvoicesIndexRoute
 }
@@ -118,11 +171,17 @@ export interface FileRoutesById {
   '/reset-password': typeof ResetPasswordRoute
   '/_authenticated/analytics': typeof AuthenticatedAnalyticsRoute
   '/_authenticated/assistant': typeof AuthenticatedAssistantRoute
+  '/_authenticated/barcode-generator': typeof AuthenticatedBarcodeGeneratorRoute
+  '/_authenticated/barcode-management': typeof AuthenticatedBarcodeManagementRoute
+  '/_authenticated/barcode-print-history': typeof AuthenticatedBarcodePrintHistoryRoute
+  '/_authenticated/barcode-scanner': typeof AuthenticatedBarcodeScannerRoute
   '/_authenticated/downloads': typeof AuthenticatedDownloadsRoute
+  '/_authenticated/pos': typeof AuthenticatedPosRoute
   '/_authenticated/settings': typeof AuthenticatedSettingsRoute
   '/_authenticated/': typeof AuthenticatedIndexRoute
   '/_authenticated/invoices/$invoice': typeof AuthenticatedInvoicesInvoiceRoute
   '/_authenticated/invoices/new': typeof AuthenticatedInvoicesNewRoute
+  '/_authenticated/products/new': typeof AuthenticatedProductsNewRoute
   '/_authenticated/sheet/$slug': typeof AuthenticatedSheetSlugRoute
   '/_authenticated/invoices/': typeof AuthenticatedInvoicesIndexRoute
 }
@@ -134,10 +193,16 @@ export interface FileRouteTypes {
     | '/reset-password'
     | '/analytics'
     | '/assistant'
+    | '/barcode-generator'
+    | '/barcode-management'
+    | '/barcode-print-history'
+    | '/barcode-scanner'
     | '/downloads'
+    | '/pos'
     | '/settings'
     | '/invoices/$invoice'
     | '/invoices/new'
+    | '/products/new'
     | '/sheet/$slug'
     | '/invoices/'
   fileRoutesByTo: FileRoutesByTo
@@ -146,11 +211,17 @@ export interface FileRouteTypes {
     | '/reset-password'
     | '/analytics'
     | '/assistant'
+    | '/barcode-generator'
+    | '/barcode-management'
+    | '/barcode-print-history'
+    | '/barcode-scanner'
     | '/downloads'
+    | '/pos'
     | '/settings'
     | '/'
     | '/invoices/$invoice'
     | '/invoices/new'
+    | '/products/new'
     | '/sheet/$slug'
     | '/invoices'
   id:
@@ -160,11 +231,17 @@ export interface FileRouteTypes {
     | '/reset-password'
     | '/_authenticated/analytics'
     | '/_authenticated/assistant'
+    | '/_authenticated/barcode-generator'
+    | '/_authenticated/barcode-management'
+    | '/_authenticated/barcode-print-history'
+    | '/_authenticated/barcode-scanner'
     | '/_authenticated/downloads'
+    | '/_authenticated/pos'
     | '/_authenticated/settings'
     | '/_authenticated/'
     | '/_authenticated/invoices/$invoice'
     | '/_authenticated/invoices/new'
+    | '/_authenticated/products/new'
     | '/_authenticated/sheet/$slug'
     | '/_authenticated/invoices/'
   fileRoutesById: FileRoutesById
@@ -219,11 +296,46 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AuthenticatedAssistantRouteImport
       parentRoute: typeof AuthenticatedRouteRoute
     }
+    '/_authenticated/barcode-generator': {
+      id: '/_authenticated/barcode-generator'
+      path: '/barcode-generator'
+      fullPath: '/barcode-generator'
+      preLoaderRoute: typeof AuthenticatedBarcodeGeneratorRouteImport
+      parentRoute: typeof AuthenticatedRouteRoute
+    }
+    '/_authenticated/barcode-management': {
+      id: '/_authenticated/barcode-management'
+      path: '/barcode-management'
+      fullPath: '/barcode-management'
+      preLoaderRoute: typeof AuthenticatedBarcodeManagementRouteImport
+      parentRoute: typeof AuthenticatedRouteRoute
+    }
+    '/_authenticated/barcode-print-history': {
+      id: '/_authenticated/barcode-print-history'
+      path: '/barcode-print-history'
+      fullPath: '/barcode-print-history'
+      preLoaderRoute: typeof AuthenticatedBarcodePrintHistoryRouteImport
+      parentRoute: typeof AuthenticatedRouteRoute
+    }
+    '/_authenticated/barcode-scanner': {
+      id: '/_authenticated/barcode-scanner'
+      path: '/barcode-scanner'
+      fullPath: '/barcode-scanner'
+      preLoaderRoute: typeof AuthenticatedBarcodeScannerRouteImport
+      parentRoute: typeof AuthenticatedRouteRoute
+    }
     '/_authenticated/downloads': {
       id: '/_authenticated/downloads'
       path: '/downloads'
       fullPath: '/downloads'
       preLoaderRoute: typeof AuthenticatedDownloadsRouteImport
+      parentRoute: typeof AuthenticatedRouteRoute
+    }
+    '/_authenticated/pos': {
+      id: '/_authenticated/pos'
+      path: '/pos'
+      fullPath: '/pos'
+      preLoaderRoute: typeof AuthenticatedPosRouteImport
       parentRoute: typeof AuthenticatedRouteRoute
     }
     '/_authenticated/settings': {
@@ -254,6 +366,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AuthenticatedInvoicesNewRouteImport
       parentRoute: typeof AuthenticatedRouteRoute
     }
+    '/_authenticated/products/new': {
+      id: '/_authenticated/products/new'
+      path: '/products/new'
+      fullPath: '/products/new'
+      preLoaderRoute: typeof AuthenticatedProductsNewRouteImport
+      parentRoute: typeof AuthenticatedRouteRoute
+    }
     '/_authenticated/sheet/$slug': {
       id: '/_authenticated/sheet/$slug'
       path: '/sheet/$slug'
@@ -267,11 +386,17 @@ declare module '@tanstack/react-router' {
 interface AuthenticatedRouteRouteChildren {
   AuthenticatedAnalyticsRoute: typeof AuthenticatedAnalyticsRoute
   AuthenticatedAssistantRoute: typeof AuthenticatedAssistantRoute
+  AuthenticatedBarcodeGeneratorRoute: typeof AuthenticatedBarcodeGeneratorRoute
+  AuthenticatedBarcodeManagementRoute: typeof AuthenticatedBarcodeManagementRoute
+  AuthenticatedBarcodePrintHistoryRoute: typeof AuthenticatedBarcodePrintHistoryRoute
+  AuthenticatedBarcodeScannerRoute: typeof AuthenticatedBarcodeScannerRoute
   AuthenticatedDownloadsRoute: typeof AuthenticatedDownloadsRoute
+  AuthenticatedPosRoute: typeof AuthenticatedPosRoute
   AuthenticatedSettingsRoute: typeof AuthenticatedSettingsRoute
   AuthenticatedIndexRoute: typeof AuthenticatedIndexRoute
   AuthenticatedInvoicesInvoiceRoute: typeof AuthenticatedInvoicesInvoiceRoute
   AuthenticatedInvoicesNewRoute: typeof AuthenticatedInvoicesNewRoute
+  AuthenticatedProductsNewRoute: typeof AuthenticatedProductsNewRoute
   AuthenticatedSheetSlugRoute: typeof AuthenticatedSheetSlugRoute
   AuthenticatedInvoicesIndexRoute: typeof AuthenticatedInvoicesIndexRoute
 }
@@ -279,11 +404,17 @@ interface AuthenticatedRouteRouteChildren {
 const AuthenticatedRouteRouteChildren: AuthenticatedRouteRouteChildren = {
   AuthenticatedAnalyticsRoute: AuthenticatedAnalyticsRoute,
   AuthenticatedAssistantRoute: AuthenticatedAssistantRoute,
+  AuthenticatedBarcodeGeneratorRoute: AuthenticatedBarcodeGeneratorRoute,
+  AuthenticatedBarcodeManagementRoute: AuthenticatedBarcodeManagementRoute,
+  AuthenticatedBarcodePrintHistoryRoute: AuthenticatedBarcodePrintHistoryRoute,
+  AuthenticatedBarcodeScannerRoute: AuthenticatedBarcodeScannerRoute,
   AuthenticatedDownloadsRoute: AuthenticatedDownloadsRoute,
+  AuthenticatedPosRoute: AuthenticatedPosRoute,
   AuthenticatedSettingsRoute: AuthenticatedSettingsRoute,
   AuthenticatedIndexRoute: AuthenticatedIndexRoute,
   AuthenticatedInvoicesInvoiceRoute: AuthenticatedInvoicesInvoiceRoute,
   AuthenticatedInvoicesNewRoute: AuthenticatedInvoicesNewRoute,
+  AuthenticatedProductsNewRoute: AuthenticatedProductsNewRoute,
   AuthenticatedSheetSlugRoute: AuthenticatedSheetSlugRoute,
   AuthenticatedInvoicesIndexRoute: AuthenticatedInvoicesIndexRoute,
 }

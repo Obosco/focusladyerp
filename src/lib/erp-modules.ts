@@ -43,6 +43,7 @@ export const MODULES: ErpModule[] = [
   { slug: "customers", sheet: "Customers", label: "Customers", group: "Masters", icon: Users },
   { slug: "suppliers", sheet: "Suppliers", label: "Suppliers", group: "Masters", icon: Truck },
 
+  { slug: "pos", sheet: "Sales", label: "POS", group: "Transactions", icon: ShoppingCart, path: "/pos" },
   { slug: "sales", sheet: "Sales", label: "Sales", group: "Transactions", icon: Receipt },
   { slug: "purchases", sheet: "Purchases", label: "Purchases", group: "Transactions", icon: ShoppingCart },
   { slug: "collection", sheet: "Daily Collection", label: "Daily Collection", group: "Transactions", icon: Wallet },
