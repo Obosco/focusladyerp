@@ -16,6 +16,7 @@ import { getSheetsConnection } from "@/lib/sheets.functions";
 import { Download, ExternalLink, History, RefreshCcw } from "lucide-react";
 import InstallButton from "@/components/install-button";
 import { isInstalled, isIos } from "@/lib/pwa";
+import { notifyUpdate } from "@/lib/notify";
 import { toast } from "sonner";
 
 export const Route = createFileRoute("/_authenticated/settings")({
@@ -126,7 +127,7 @@ function SettingsPage() {
                 size="sm"
                 onClick={() => {
                   queryClient.invalidateQueries({ queryKey: ["erp"] });
-                  toast.success("Re-synced from Google Sheets");
+                  notifyUpdate("Re-synced from Google Sheets");
                 }}
               >
                 <RefreshCcw className="mr-2 h-4 w-4" /> Sync now
@@ -158,7 +159,7 @@ function SettingsPage() {
                     setMemberEmail("");
                     setMemberPassword("");
                     await queryClient.invalidateQueries({ queryKey: ["auth", "members"] });
-                    toast.success("Member account created");
+                    notifyUpdate("Member account created");
                   } catch (error) {
                     toast.error(
                       error instanceof Error ? error.message : "Could not create member account",
@@ -230,7 +231,7 @@ function SettingsPage() {
                         });
                         setResetEmail("");
                         setResetPassword("");
-                        toast.success("Member password updated");
+                        notifyUpdate("Member password updated");
                       } catch (error) {
                         toast.error(
                           error instanceof Error ? error.message : "Could not reset password",

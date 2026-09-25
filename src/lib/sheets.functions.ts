@@ -12,11 +12,13 @@ import {
   createCustomer,
   saveReturn,
   getSpreadsheetId,
+  recordStockMovement,
   type InvoiceInput,
   type ErpSettings,
   type ProductInput,
   type CustomerInput,
   type ReturnInput,
+  type StockMovementInput,
 } from "./sheets.server";
 
 const requireAuth = createMiddleware().server(async ({ next }) => {
@@ -143,6 +145,19 @@ export const createReturn = createServerFn({ method: "POST" })
     return data;
   })
   .handler(async ({ data }) => saveReturn(data));
+
+export const updateStockLevel = createServerFn({ method: "POST" })
+  .middleware([requireAuth])
+  .validator((data: StockMovementInput) => {
+    requiredText(data?.barcode, "Barcode", 120);
+    boundedNumber(data.quantity, "Quantity", 0.0001, 1_000_000);
+    if (!data.movementType || !["Stock In", "Stock Out", "Adjustment"].includes(data.movementType)) {
+      throw new Error("Movement type is required.");
+    }
+    if (!data.product) requiredText(data.product ?? "Unknown Product", "Product", 160);
+    return data;
+  })
+  .handler(async ({ data }) => recordStockMovement(data));
 
 export const logDownload = createServerFn({ method: "POST" })
   .middleware([requireAuth])

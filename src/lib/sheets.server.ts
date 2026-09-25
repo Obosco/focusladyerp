@@ -86,6 +86,36 @@ function assertAllowedRange(range: string) {
   }
 }
 
+const DEFAULT_SHEET_HEADERS: Record<string, string[]> = {
+  Dashboard: ["Metric", "Value", "Updated At"],
+  Company: ["Company Name", "Phone", "Email", "Address", "GSTIN", "Notes"],
+  Products: ["ID", "Name", "Category", "Brand", "Description", "Unit", "Barcode", "Stock", "Cost", "Price", "Minimum Stock", "Status"],
+  "Product Variants": ["Variant ID", "Product ID", "Variant Name", "SKU", "Barcode", "Barcode Type", "Size", "Color", "Design", "Purchase Price", "Selling Price", "Current Stock", "Minimum Stock", "Unit", "Status", "Created At", "Updated At"],
+  Stock: ["Product", "Barcode", "Quantity", "Purchase", "Size", "Color"],
+  Customers: ["ID", "Name", "Phone", "Address", "City", "State", "GSTIN", "Type", "Open Balance", "Paid", "Due", "Notes", "Active", "Created At", "Date", "Last Paid", "Customer Count", "Sales Value", "Total Due"],
+  Suppliers: ["ID", "Name", "Phone", "Address", "City", "State", "GSTIN", "Category", "Notes"],
+  Sales: ["Invoice", "Date", "Customer", "Subtotal", "GST", "Total", "Paid", "Due", "Status", "Notes", "Vehicle No", "Salesman", "GSTIN", "Mode", "Address", "Valid Until", "Customer ID"],
+  Purchases: ["Invoice", "Date", "Supplier", "Subtotal", "GST", "Total", "Paid", "Due", "Status", "Notes"],
+  "Daily Collection": ["Date", "Customer", "Invoice", "Amount", "Mode"],
+  Expenses: ["Date", "Category", "Description", "Amount", "Payment Mode", "Notes"],
+  "Cash Book": ["Date", "Type", "Reference", "Description", "Debit", "Credit", "Balance"],
+  "Customer Ledger": ["Date", "Customer", "Debit", "Credit", "Narration"],
+  "Supplier Ledger": ["Date", "Supplier", "Debit", "Credit", "Narration"],
+  "Profit & Loss": ["Month", "Revenue", "Expenses", "Net Profit"],
+  Settings: ["Key", "Value"],
+  "Sale Items": ["Invoice", "Date", "Customer", "Product", "HSN", "Qty", "Rate", "Amount", "GST %", "GST Amount", "Total", "Size", "Color"],
+  "Download History": ["Timestamp", "Type", "Reference", "Filename", "Format", "Note"],
+  "Barcode Database": ["Barcode ID", "Barcode", "Barcode Type", "Product ID", "Product Name", "Variant ID", "Variant Name", "SKU", "Category", "Brand", "Size", "Color", "Design", "Price", "Status", "Created At", "Created By", "Updated At"],
+  "Barcode Sequences": ["Sequence ID", "Barcode Type", "Prefix", "Last Number", "Next Number", "Updated At"],
+  "Barcode Templates": ["Template ID", "Template Name", "Label Width", "Label Height", "Paper Size", "Printer Type", "Columns", "Margin Top", "Margin Bottom", "Margin Left", "Margin Right", "Horizontal Gap", "Vertical Gap", "Font Size", "Show Product Name", "Show Variant", "Show SKU", "Show Price", "Show Size", "Show Color", "Show Barcode Number", "Show Company", "Created At", "Updated At"],
+  "Barcode Print History": ["Print ID", "Barcode", "Product ID", "Variant ID", "Product Name", "Quantity", "Template", "Printer Type", "Printed By", "Printed At"],
+  "POS Held Bills": ["Hold ID", "Customer ID", "Customer Name", "Items JSON", "Subtotal", "Discount", "Tax", "Total", "Created By", "Created At", "Updated At", "Status"],
+  "POS Payments": ["Payment ID", "Invoice ID", "Payment Method", "Amount", "Reference", "Payment Date", "Created By"],
+  Returns: ["Return ID", "Date", "Invoice", "Customer", "Product", "Size", "Color", "Qty", "Amount", "Type", "Reason"],
+  "Audit History": ["Audit ID", "Timestamp", "User ID", "User Name", "Action", "Module", "Record ID", "Product ID", "Variant ID", "Barcode", "Old Value", "New Value", "Description", "Device", "Status"],
+  Users: ["User ID", "Full Name", "Email", "Mobile Number", "Role", "Status", "Department", "Employee ID", "Profile Image URL", "Created At", "Created By", "Activated At", "Last Login At", "Last Password Change At", "Session Revoked At", "Failed Login Attempts", "Locked Until", "Email Verified", "Updated At"],
+};
+
 function columnLabel(index: number) {
   let label = "";
   let value = index;
@@ -108,11 +138,21 @@ export async function ensureSheet(title: string, header: string[] = []) {
     throw new Error(`That worksheet is not available to this ERP: ${normalized}`);
   }
 
+  const resolvedHeader = header.length > 0 ? header : DEFAULT_SHEET_HEADERS[normalized] ?? [];
+
   try {
-    await readRange(`${normalized}!A1`);
+    await sheetsRequest<{ values?: SheetValues }>(`/values/${encodeURIComponent(`${normalized}!A1`)}`);
+    if (resolvedHeader.length > 0) {
+      const existing = await sheetsRequest<{ values?: SheetValues }>(`/values/${encodeURIComponent(`${normalized}!A1:${columnLabel(Math.max(resolvedHeader.length, 1))}1`)}`);
+      if (!existing.values || existing.values.length === 0 || existing.values[0].length === 0) {
+        await updateRange(`${normalized}!A1:${columnLabel(resolvedHeader.length)}1`, [resolvedHeader]);
+      }
+    }
     return;
-  } catch {
-    // fall through and create the worksheet server-side when missing.
+  } catch (error) {
+    if (!(error instanceof SheetsRequestError) || error.status !== 400) {
+      if (!(error instanceof SheetsRequestError) || error.status !== 404) throw error;
+    }
   }
 
   const result = await sheetsRequest<{ replies?: { addSheet?: { properties?: { title?: string } } }[] }>(
@@ -126,13 +166,13 @@ export async function ensureSheet(title: string, header: string[] = []) {
   );
 
   const created = result.replies?.[0]?.addSheet?.properties?.title;
-  if (!created && header.length === 0) {
+  if (!created && resolvedHeader.length === 0) {
     throw new Error(`Failed to create the ${normalized} worksheet.`);
   }
 
-  if (header.length > 0) {
-    const lastColumn = columnLabel(header.length);
-    await updateRange(`${normalized}!A1:${lastColumn}1`, [header]);
+  if (resolvedHeader.length > 0) {
+    const lastColumn = columnLabel(resolvedHeader.length);
+    await updateRange(`${normalized}!A1:${lastColumn}1`, [resolvedHeader]);
   }
 }
 
@@ -205,10 +245,22 @@ class SheetsRequestError extends Error {
 
 async function readSheetValues(range: string): Promise<SheetValues> {
   assertAllowedRange(range);
-  const data = await sheetsRequest<{ values?: SheetValues }>(
-    `/values/${encodeURIComponent(range)}?valueRenderOption=UNFORMATTED_VALUE&dateTimeRenderOption=SERIAL_NUMBER`,
-  );
-  return data.values ?? [];
+  const title = sheetTitleFromRange(range);
+  try {
+    const data = await sheetsRequest<{ values?: SheetValues }>(
+      `/values/${encodeURIComponent(range)}?valueRenderOption=UNFORMATTED_VALUE&dateTimeRenderOption=SERIAL_NUMBER`,
+    );
+    return data.values ?? [];
+  } catch (error) {
+    if (!(error instanceof SheetsRequestError) || (error.status !== 400 && error.status !== 404)) {
+      throw error;
+    }
+    await ensureSheet(title, DEFAULT_SHEET_HEADERS[title] ?? []);
+    const data = await sheetsRequest<{ values?: SheetValues }>(
+      `/values/${encodeURIComponent(range)}?valueRenderOption=UNFORMATTED_VALUE&dateTimeRenderOption=SERIAL_NUMBER`,
+    );
+    return data.values ?? [];
+  }
 }
 
 export async function readRange(range: string): Promise<SheetValues> {
@@ -217,6 +269,11 @@ export async function readRange(range: string): Promise<SheetValues> {
 
 export async function readRanges(ranges: string[]) {
   ranges.forEach(assertAllowedRange);
+  for (const range of ranges) {
+    const title = sheetTitleFromRange(range);
+    if (title) await ensureSheet(title, DEFAULT_SHEET_HEADERS[title] ?? []);
+  }
+
   const params = new URLSearchParams();
   ranges.forEach((range) => params.append("ranges", range));
   try {
@@ -237,7 +294,7 @@ export async function readRanges(ranges: string[]) {
         try {
           return { range, values: await readSheetValues(range) };
         } catch (rangeError) {
-          if (rangeError instanceof SheetsRequestError && rangeError.status === 400) {
+          if (rangeError instanceof SheetsRequestError && (rangeError.status === 400 || rangeError.status === 404)) {
             console.warn("Google Sheets range unavailable", range);
             return { range, values: [] as SheetValues };
           }
@@ -307,6 +364,7 @@ export async function readSettings(): Promise<ErpSettings> {
 }
 
 export async function writeSettings(s: ErpSettings) {
+  await ensureSheet("Settings", DEFAULT_SHEET_HEADERS.Settings);
   await updateRange("Settings!A2:B4", [
     ["default_gst_percent", String(s.defaultGstPercent)],
     ["reorder_threshold", String(s.reorderThreshold)],
@@ -320,29 +378,188 @@ export async function writeSettings(s: ErpSettings) {
 export type ProductInput = {
   name: string;
   category?: string;
+  brand?: string;
+  description?: string;
+  unit?: string;
+  barcode?: string;
+  barcodeType?: string;
   cost?: number;
   price?: number;
   size?: string;
   color?: string;
+  minimumStock?: number;
+  status?: string;
   gstPercent?: number;
+  variants?: Array<{
+    variantName?: string;
+    sku?: string;
+    barcode?: string;
+    barcodeType?: string;
+    size?: string;
+    color?: string;
+    design?: string;
+    purchasePrice?: number;
+    sellingPrice?: number;
+    currentStock?: number;
+    minimumStock?: number;
+    unit?: string;
+    status?: string;
+  }>;
 };
 
+function normalizeBarcode(value: string | undefined) {
+  return String(value ?? "").trim();
+}
+
+function isValidBarcode(value: string, type?: string) {
+  const code = normalizeBarcode(value);
+  if (!code) return true;
+  const normalizedType = (type ?? "CODE128").toUpperCase();
+  const digitsOnly = /^\d+$/;
+  const alphaNumeric = /^[A-Za-z0-9]+$/;
+
+  if (normalizedType === "EAN-13" || normalizedType === "UPC-A") return digitsOnly.test(code) && code.length === (normalizedType === "EAN-13" ? 13 : 12);
+  if (normalizedType === "EAN-8") return digitsOnly.test(code) && code.length === 8;
+  if (normalizedType === "ITF-14") return digitsOnly.test(code) && code.length === 14;
+  if (normalizedType === "CODE39" || normalizedType === "CODE128" || normalizedType === "QR CODE") {
+    return alphaNumeric.test(code) && code.length >= 3 && code.length <= 255;
+  }
+  return alphaNumeric.test(code) && code.length >= 3 && code.length <= 255;
+}
+
+async function checkDuplicateBarcode(barcode: string, skipId?: string) {
+  const clean = normalizeBarcode(barcode);
+  if (!clean) return false;
+  const [productRows, variantRows] = await Promise.all([
+    readRange("Products!A2:Q2000"),
+    readRange("Product Variants!A2:Q2000"),
+  ]);
+
+  const productMatches = productRows.some((row) => {
+    const value = normalizeBarcode(String(row[6] ?? ""));
+    return value && value === clean && !(skipId && String(row[0] ?? "") === skipId);
+  });
+
+  if (productMatches) return true;
+
+  return variantRows.some((row) => {
+    const value = normalizeBarcode(String(row[4] ?? ""));
+    return value && value === clean && !(skipId && String(row[1] ?? "") === skipId);
+  });
+}
+
 export async function createProduct(p: ProductInput) {
+  await ensureSheet("Products", DEFAULT_SHEET_HEADERS.Products);
+  await ensureSheet("Product Variants", DEFAULT_SHEET_HEADERS["Product Variants"]);
+  await ensureSheet("Barcode Database", DEFAULT_SHEET_HEADERS["Barcode Database"]);
+
+  const productBarcode = normalizeBarcode(p.barcode);
+  if (productBarcode && !isValidBarcode(productBarcode, p.barcodeType)) {
+    throw new Error("Barcode format is invalid for the selected barcode type.");
+  }
+  if (productBarcode && (await checkDuplicateBarcode(productBarcode))) {
+    throw new Error("Barcode already exists for another product/variant.");
+  }
+
   const rows = await readRange("Products!A2:A2000");
   const id = `P-${String(rows.filter((r) => (r[0] ?? "").trim()).length + 1).padStart(4, "0")}`;
-  await appendRows("Products!A:I", [
+  await appendRows("Products!A:Q", [
     [
       id,
       p.name,
       p.category ?? "",
+      p.brand ?? "",
+      p.description ?? "",
+      p.unit ?? "",
+      productBarcode,
       "0",
       String(p.cost ?? 0),
       String(p.price ?? 0),
-      p.size ?? "",
-      p.color ?? "",
-      String(p.gstPercent ?? 0),
+      String(p.minimumStock ?? 0),
+      p.status ?? "Active",
     ],
   ]);
+
+  const variants = (p.variants ?? []).filter((variant) => variant.variantName || variant.sku || variant.barcode || variant.size || variant.color);
+  for (const variant of variants) {
+    const variantBarcode = normalizeBarcode(variant.barcode);
+    if (variantBarcode && !isValidBarcode(variantBarcode, variant.barcodeType)) {
+      throw new Error(`Variant barcode for ${variant.variantName || "variant"} is invalid.`);
+    }
+    if (variantBarcode && (await checkDuplicateBarcode(variantBarcode))) {
+      throw new Error("Barcode already exists for another product/variant.");
+    }
+
+    const variantRows = await readRange("Product Variants!A2:A2000");
+    const variantId = `V-${String(variantRows.filter((r) => (r[0] ?? "").trim()).length + 1).padStart(4, "0")}`;
+    const createdAt = new Date().toISOString();
+    await appendRows("Product Variants!A:Q", [[
+      variantId,
+      id,
+      variant.variantName ?? "",
+      variant.sku ?? "",
+      variantBarcode,
+      variant.barcodeType ?? p.barcodeType ?? "CODE128",
+      variant.size ?? p.size ?? "",
+      variant.color ?? p.color ?? "",
+      variant.design ?? "",
+      String(variant.purchasePrice ?? p.cost ?? 0),
+      String(variant.sellingPrice ?? p.price ?? 0),
+      String(variant.currentStock ?? 0),
+      String(variant.minimumStock ?? p.minimumStock ?? 0),
+      variant.unit ?? p.unit ?? "",
+      variant.status ?? "Active",
+      createdAt,
+      createdAt,
+    ]]);
+
+    if (variantBarcode) {
+      await appendRows("Barcode Database!A:S", [[
+        `B-${String((await readRange("Barcode Database!A2:A2000")).filter((r) => (r[0] ?? "").trim()).length + 1).padStart(4, "0")}`,
+        variantBarcode,
+        variant.barcodeType ?? p.barcodeType ?? "CODE128",
+        id,
+        p.name,
+        variantId,
+        variant.variantName ?? "",
+        variant.sku ?? "",
+        p.category ?? "",
+        p.brand ?? "",
+        variant.size ?? p.size ?? "",
+        variant.color ?? p.color ?? "",
+        variant.design ?? "",
+        String(variant.sellingPrice ?? p.price ?? 0),
+        variant.status ?? "Active",
+        createdAt,
+        p.name,
+        createdAt,
+      ]]);
+    }
+  }
+
+  if (productBarcode) {
+    await appendRows("Barcode Database!A:S", [[
+      `B-${String((await readRange("Barcode Database!A2:A2000")).filter((r) => (r[0] ?? "").trim()).length + 1).padStart(4, "0")}`,
+      productBarcode,
+      p.barcodeType ?? "CODE128",
+      id,
+      p.name,
+      "",
+      "",
+      "",
+      p.category ?? "",
+      p.brand ?? "",
+      p.size ?? "",
+      p.color ?? "",
+      "",
+      String(p.price ?? 0),
+      p.status ?? "Active",
+      new Date().toISOString(),
+      p.name,
+      new Date().toISOString(),
+    ]]);
+  }
+
   return { id, ...p };
 }
 
@@ -408,6 +625,7 @@ async function resolveCustomer(input: InvoiceInput) {
 function paidDate(paid: number, date: string) { return paid > 0 ? date : ""; }
 
 export async function createCustomer(c: CustomerInput) {
+  await ensureSheet("Customers", DEFAULT_SHEET_HEADERS.Customers);
   return resolveCustomer({
     invoice: "",
     date: new Date().toISOString().slice(0, 10),
@@ -482,6 +700,13 @@ export function computeInvoice(input: InvoiceInput) {
 }
 
 export async function saveInvoice(input: InvoiceInput) {
+  await ensureSheet("Sales", DEFAULT_SHEET_HEADERS.Sales);
+  await ensureSheet("Stock", DEFAULT_SHEET_HEADERS.Stock);
+  await ensureSheet("Customers", DEFAULT_SHEET_HEADERS.Customers);
+  await ensureSheet("Customer Ledger", DEFAULT_SHEET_HEADERS["Customer Ledger"]);
+  await ensureSheet("Daily Collection", DEFAULT_SHEET_HEADERS["Daily Collection"]);
+  await ensureSheet("Sale Items", DEFAULT_SHEET_HEADERS["Sale Items"]);
+
   const existingInvoices = await readRange("Sales!A2:A5000");
   if (existingInvoices.some((row) => String(row[0] ?? "").trim() === input.invoice.trim())) {
     throw new Error(`Invoice ${input.invoice} already exists.`);
@@ -575,7 +800,47 @@ export type ReturnInput = {
   items: { product: string; qty: number; rate: number; size?: string; color?: string }[];
 };
 
+export type StockMovementInput = {
+  barcode: string;
+  product?: string;
+  variant?: string;
+  sku?: string;
+  warehouse?: string;
+  movementType: "Stock In" | "Stock Out" | "Adjustment";
+  quantity: number;
+  reason?: string;
+  notes?: string;
+};
+
+export async function recordStockMovement(input: StockMovementInput) {
+  await ensureSheet("Stock", DEFAULT_SHEET_HEADERS.Stock);
+  const qty = Number(input.quantity ?? 0);
+  if (!input.barcode.trim()) throw new Error("Barcode is required.");
+  if (!Number.isFinite(qty) || qty <= 0) throw new Error("Quantity must be greater than zero.");
+
+  await appendRows("Stock!A:F", [[
+    input.product ?? "Unknown Product",
+    input.barcode,
+    String(qty),
+    input.movementType,
+    input.variant ?? "",
+    input.warehouse ?? "Main Store",
+  ]]);
+
+  return {
+    ok: true,
+    barcode: input.barcode,
+    movementType: input.movementType,
+    quantity: qty,
+    warehouse: input.warehouse ?? "Main Store",
+  };
+}
+
 export async function saveReturn(input: ReturnInput) {
+  await ensureSheet("Returns", DEFAULT_SHEET_HEADERS.Returns);
+  await ensureSheet("Stock", DEFAULT_SHEET_HEADERS.Stock);
+  await ensureSheet("Customer Ledger", DEFAULT_SHEET_HEADERS["Customer Ledger"]);
+
   const existing = await readRange("Returns!A2:A2000");
   const id = `RET-${String(existing.filter((r) => (r[0] ?? "").trim()).length + 1).padStart(4, "0")}`;
   const amount = input.items.reduce((a, i) => a + i.qty * i.rate, 0);

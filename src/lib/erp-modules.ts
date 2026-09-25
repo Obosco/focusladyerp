@@ -14,6 +14,10 @@ import {
   UserCheck,
   UserCog,
   TrendingUp,
+  Barcode,
+  ScanLine,
+  Printer,
+  Sparkles,
   type LucideIcon,
 } from "lucide-react";
 
@@ -23,6 +27,7 @@ export type ErpModule = {
   label: string;
   group: "Overview" | "Masters" | "Transactions" | "Accounts";
   icon: LucideIcon;
+  path?: string;
 };
 
 export const MODULES: ErpModule[] = [
@@ -30,6 +35,10 @@ export const MODULES: ErpModule[] = [
   { slug: "company", sheet: "Company", label: "Companies", group: "Overview", icon: Building2 },
 
   { slug: "products", sheet: "Products", label: "Products", group: "Masters", icon: Package },
+  { slug: "barcode-management", sheet: "Barcode Database", label: "Barcode Management", group: "Masters", icon: Barcode, path: "/barcode-management" },
+  { slug: "barcode-generator", sheet: "Barcode Templates", label: "Barcode Generator", group: "Masters", icon: Sparkles, path: "/barcode-generator" },
+  { slug: "barcode-scanner", sheet: "Barcode Database", label: "Barcode Scanner", group: "Masters", icon: ScanLine, path: "/barcode-scanner" },
+  { slug: "barcode-print-history", sheet: "Barcode Print History", label: "Barcode Print History", group: "Masters", icon: Printer, path: "/barcode-print-history" },
   { slug: "stock", sheet: "Stock", label: "Stock", group: "Masters", icon: Boxes },
   { slug: "customers", sheet: "Customers", label: "Customers", group: "Masters", icon: Users },
   { slug: "suppliers", sheet: "Suppliers", label: "Suppliers", group: "Masters", icon: Truck },
@@ -52,6 +61,14 @@ export const HIDDEN_SHEETS = [
   "Settings",
   "Returns",
   "Users",
+  "Barcode Database",
+  "Barcode Templates",
+  "Barcode Print History",
+  "Product Variants",
+  "Barcode Sequences",
+  "POS Held Bills",
+  "POS Payments",
+  "Audit History",
 ];
 
 export const ALLOWED_SHEET_TITLES = [
@@ -59,7 +76,19 @@ export const ALLOWED_SHEET_TITLES = [
 ];
 
 
-export const getModuleBySlug = (slug: string) => MODULES.find((m) => m.slug === slug);
+const SLUG_ALIASES: Record<string, string> = {
+  "daily-collection": "collection",
+  "dailycollection": "collection",
+  "daily_collection": "collection",
+};
+
+export const normalizeModuleSlug = (slug: string) => {
+  const cleaned = String(slug ?? "").trim().toLowerCase();
+  return SLUG_ALIASES[cleaned] ?? cleaned;
+};
+
+export const getModuleBySlug = (slug: string) =>
+  MODULES.find((m) => normalizeModuleSlug(m.slug) === normalizeModuleSlug(slug));
 export const getModuleBySheet = (sheet: string) => MODULES.find((m) => m.sheet === sheet);
 
 export const GROUPS: ErpModule["group"][] = ["Overview", "Masters", "Transactions", "Accounts"];

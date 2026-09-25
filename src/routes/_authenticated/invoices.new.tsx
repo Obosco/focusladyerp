@@ -10,6 +10,7 @@ import { Label } from "@/components/ui/label";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Plus, Printer, Save, Trash2 } from "lucide-react";
 import { toast } from "sonner";
+import { notifyUpdate } from "@/lib/notify";
 import { amountInWords, COMPANY, emptyItem, invoiceTotals, itemValues, modeLabel, type InvoiceDraft, type InvoiceItem, type InvoiceMode } from "@/lib/invoice";
 
 const mastersQuery = queryOptions({
@@ -34,7 +35,7 @@ function Field({ label, value, setValue, type = "text", className = "", readOnly
 }
 
 function NewInvoicePage() {
-  return <ErpShell activeSlug="invoices" title="Invoice Editor" subtitle="A5 landscape, print-ready invoice"><Suspense fallback={<div>Loading invoice editor...</div>}><InvoiceEditor /></Suspense></ErpShell>;
+  return <ErpShell activeSlug="invoices" title="Invoice Editor" subtitle="A4 portable, print-ready invoice"><Suspense fallback={<div>Loading invoice editor...</div>}><InvoiceEditor /></Suspense></ErpShell>;
 }
 
 function InvoiceEditor() {
@@ -88,7 +89,7 @@ function InvoiceEditor() {
     try {
       await save({ data: { ...draft, items: validItems, gstPercent: mode === "gst" ? Math.max(...validItems.map((item) => item.gstPercent), 0) : 0 } });
       await queryClient.invalidateQueries({ queryKey: ["erp"] });
-      toast.success("Invoice saved");
+      notifyUpdate("Invoice saved");
       navigate({ to: "/invoices/$invoice", params: { invoice } });
     } catch (error) { toast.error(error instanceof Error ? error.message : "Could not save invoice"); } finally { setBusy(false); }
   };

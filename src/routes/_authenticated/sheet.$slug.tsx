@@ -89,6 +89,11 @@ function SheetPage() {
         </>
       }
     >
+      {mod.slug === "products" ? (
+        <Button variant="outline" size="sm" asChild className="mr-2">
+          <Link to="/products/new">Add product</Link>
+        </Button>
+      ) : null}
       <Suspense fallback={<div className="text-sm text-muted-foreground">Loading…</div>}>
         <SheetView sheet={mod.sheet} filename={mod.slug} title={mod.label} />
       </Suspense>
