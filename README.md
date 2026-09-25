@@ -17,7 +17,7 @@ npm.cmd run desktop:build
 Expected output:
 
 ```text
-release/FocusLady-ERP-Setup.exe
+out/make/squirrel.windows/x64/FocusLady-ERP-Setup.exe
 ```
 
 This desktop shell loads the production app at https://focusladyerp.vercel.app while preserving the existing web/PWA experience, authentication flow, invoice features, and Vercel deployment.

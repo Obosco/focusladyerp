@@ -5,24 +5,40 @@ module.exports = {
   packagerConfig: {
     asar: true,
     icon: 'public/icon-512.png',
+    ignore: (filePath) => {
+      const relativePath = filePath
+        .replace(/^[/\\]+/, '')
+        .replaceAll('\\', '/');
+
+      if (
+        relativePath === 'electron.cjs' ||
+        relativePath === 'preload.js' ||
+        relativePath === 'package.json'
+      ) {
+        return false;
+      }
+
+      if (relativePath === 'public') {
+        return false;
+      }
+
+      if (relativePath.startsWith('public/')) {
+        return ![
+          'public/icon-512.png',
+          'public/focus-lady-logo.svg',
+        ].includes(relativePath);
+      }
+
+      return relativePath !== '';
+    },
   },
   rebuildConfig: {},
   makers: [
     {
       name: '@electron-forge/maker-squirrel',
-      config: {},
-    },
-    {
-      name: '@electron-forge/maker-zip',
-      platforms: ['darwin'],
-    },
-    {
-      name: '@electron-forge/maker-deb',
-      config: {},
-    },
-    {
-      name: '@electron-forge/maker-rpm',
-      config: {},
+      config: {
+        setupExe: 'FocusLady-ERP-Setup.exe',
+      },
     },
   ],
   plugins: [
