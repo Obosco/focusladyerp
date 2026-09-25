@@ -5,6 +5,7 @@ import { cn } from "@/lib/utils";
 import {
   ArrowLeft,
   BarChart3,
+  Bot,
   ExternalLink,
   FilePlus2,
   LogOut,
@@ -103,6 +104,19 @@ export function ErpShell({
                 ))}
               </div>
             </div>
+
+            <Link
+              to="/assistant"
+              className={cn(
+                "mb-4 flex items-center gap-2 rounded-md px-3 py-2 text-sm transition-colors",
+                path === "/assistant"
+                  ? "bg-sidebar-primary text-sidebar-primary-foreground"
+                  : "text-sidebar-foreground hover:bg-sidebar-accent hover:text-sidebar-accent-foreground",
+              )}
+            >
+              <Bot className="h-4 w-4 shrink-0" />
+              <span className="truncate">ERP Assistant</span>
+            </Link>
 
             {GROUPS.map((g) => (
               <div key={g} className="mb-4">
