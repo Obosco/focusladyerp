@@ -69,9 +69,10 @@ function InvoiceList() {
   const [from, setFrom] = useState("");
   const [to, setTo] = useState("");
 
+  const values = Array.isArray(data?.values) ? data.values : Array.isArray(data?.data) ? data.data : [];
   const rows = useMemo(
-    () => data.values.filter((r) => (r[0] ?? "").trim() !== ""),
-    [data.values],
+    () => values.filter((r) => Array.isArray(r) && (r[0] ?? "").trim() !== ""),
+    [values],
   );
 
   const filtered = useMemo(

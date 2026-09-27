@@ -40,13 +40,43 @@ function boundedNumber(value: unknown, label: string, minimum = 0, maximum = Num
   return value;
 }
 
+const routeSheetName = (range: string) => {
+  const cleaned = String(range ?? "").trim();
+  if (!cleaned) return "Sheet";
+  const withoutQuotes = cleaned.replace(/^'|'$/g, "");
+  const split = withoutQuotes.split("!");
+  return split[0] || "Sheet";
+};
+
 export const getSheetRange = createServerFn({ method: "GET" })
   .middleware([requireAuth])
   .validator((data: { range: string }) => {
     requiredText(data?.range, "range", 120);
     return data;
   })
-  .handler(async ({ data }) => ({ values: await readRange(data.range) }));
+  .handler(async ({ data }) => {
+    try {
+      const values = await readRange(data.range);
+      return {
+        success: true as const,
+        data: values,
+        values,
+      };
+    } catch (error) {
+      const sheetName = routeSheetName(data.range);
+      console.error("[SHEET_ROUTE_ERROR]", {
+        route: "/sheet",
+        sheetName,
+        error: error instanceof Error ? error.message : error,
+      });
+      return {
+        success: false as const,
+        error: `Unable to load ${sheetName}`,
+        data: [] as string[][],
+        values: [] as string[][],
+      };
+    }
+  });
 
 export const getSheetsBatch = createServerFn({ method: "GET" })
   .middleware([requireAuth])
@@ -57,7 +87,29 @@ export const getSheetsBatch = createServerFn({ method: "GET" })
     data.ranges.forEach((range) => requiredText(range, "range", 120));
     return data;
   })
-  .handler(async ({ data }) => ({ valueRanges: await readRanges(data.ranges) }));
+  .handler(async ({ data }) => {
+    try {
+      const valueRanges = await readRanges(data.ranges);
+      return {
+        success: true as const,
+        valueRanges,
+        data: valueRanges,
+      };
+    } catch (error) {
+      const sheetName = data.ranges.map(routeSheetName).join(", ");
+      console.error("[SHEET_ROUTE_ERROR]", {
+        route: "/sheet",
+        sheetName,
+        error: error instanceof Error ? error.message : error,
+      });
+      return {
+        success: false as const,
+        error: "Unable to load sheet data",
+        valueRanges: [] as Array<{ range: string; values: string[][] }>,
+        data: [] as Array<{ range: string; values: string[][] }>,
+      };
+    }
+  });
 
 export const getNextInvoiceNumber = createServerFn({ method: "GET" })
   .middleware([requireAuth])

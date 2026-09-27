@@ -68,10 +68,33 @@ function DashboardPage() {
       subtitle="Live from Focus_Lady_Bra_ERP_Phase1_2"
       actions={<RefreshButton />}
     >
-      <Suspense fallback={<div className="text-sm text-muted-foreground">Loading…</div>}>
+      <Suspense fallback={<DashboardSkeleton />}>
         <DashboardContent />
       </Suspense>
     </ErpShell>
+  );
+}
+
+function DashboardSkeleton() {
+  return (
+    <div className="space-y-6">
+      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6">
+        {Array.from({ length: 6 }).map((_, index) => (
+          <div key={index} className="rounded-xl border border-border bg-card p-4 animate-pulse">
+            <div className="mb-3 h-3 w-20 rounded bg-muted" />
+            <div className="h-8 w-24 rounded bg-muted" />
+          </div>
+        ))}
+      </div>
+      <div className="grid gap-4 lg:grid-cols-2">
+        {Array.from({ length: 2 }).map((_, index) => (
+          <div key={index} className="h-56 rounded-xl border border-border bg-card p-4 animate-pulse">
+            <div className="h-4 w-32 rounded bg-muted" />
+            <div className="mt-6 h-full w-full rounded bg-muted/80" />
+          </div>
+        ))}
+      </div>
+    </div>
   );
 }
 

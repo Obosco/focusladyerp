@@ -20,6 +20,7 @@ import { Route as AuthenticatedBarcodeManagementRouteImport } from './routes/_au
 import { Route as AuthenticatedBarcodePrintHistoryRouteImport } from './routes/_authenticated/barcode-print-history'
 import { Route as AuthenticatedBarcodeScannerRouteImport } from './routes/_authenticated/barcode-scanner'
 import { Route as AuthenticatedDownloadsRouteImport } from './routes/_authenticated/downloads'
+import { Route as AuthenticatedNotificationsRouteImport } from './routes/_authenticated/notifications'
 import { Route as AuthenticatedPosRouteImport } from './routes/_authenticated/pos'
 import { Route as AuthenticatedSettingsRouteImport } from './routes/_authenticated/settings'
 import { Route as AuthenticatedInvoicesIndexRouteImport } from './routes/_authenticated/invoices.index'
@@ -86,6 +87,12 @@ const AuthenticatedDownloadsRoute = AuthenticatedDownloadsRouteImport.update({
   path: '/downloads',
   getParentRoute: () => AuthenticatedRouteRoute,
 } as any)
+const AuthenticatedNotificationsRoute =
+  AuthenticatedNotificationsRouteImport.update({
+    id: '/notifications',
+    path: '/notifications',
+    getParentRoute: () => AuthenticatedRouteRoute,
+  } as any)
 const AuthenticatedPosRoute = AuthenticatedPosRouteImport.update({
   id: '/pos',
   path: '/pos',
@@ -137,6 +144,7 @@ export interface FileRoutesByFullPath {
   '/barcode-print-history': typeof AuthenticatedBarcodePrintHistoryRoute
   '/barcode-scanner': typeof AuthenticatedBarcodeScannerRoute
   '/downloads': typeof AuthenticatedDownloadsRoute
+  '/notifications': typeof AuthenticatedNotificationsRoute
   '/pos': typeof AuthenticatedPosRoute
   '/settings': typeof AuthenticatedSettingsRoute
   '/invoices/$invoice': typeof AuthenticatedInvoicesInvoiceRoute
@@ -155,6 +163,7 @@ export interface FileRoutesByTo {
   '/barcode-print-history': typeof AuthenticatedBarcodePrintHistoryRoute
   '/barcode-scanner': typeof AuthenticatedBarcodeScannerRoute
   '/downloads': typeof AuthenticatedDownloadsRoute
+  '/notifications': typeof AuthenticatedNotificationsRoute
   '/pos': typeof AuthenticatedPosRoute
   '/settings': typeof AuthenticatedSettingsRoute
   '/': typeof AuthenticatedIndexRoute
@@ -176,6 +185,7 @@ export interface FileRoutesById {
   '/_authenticated/barcode-print-history': typeof AuthenticatedBarcodePrintHistoryRoute
   '/_authenticated/barcode-scanner': typeof AuthenticatedBarcodeScannerRoute
   '/_authenticated/downloads': typeof AuthenticatedDownloadsRoute
+  '/_authenticated/notifications': typeof AuthenticatedNotificationsRoute
   '/_authenticated/pos': typeof AuthenticatedPosRoute
   '/_authenticated/settings': typeof AuthenticatedSettingsRoute
   '/_authenticated/': typeof AuthenticatedIndexRoute
@@ -198,6 +208,7 @@ export interface FileRouteTypes {
     | '/barcode-print-history'
     | '/barcode-scanner'
     | '/downloads'
+    | '/notifications'
     | '/pos'
     | '/settings'
     | '/invoices/$invoice'
@@ -216,6 +227,7 @@ export interface FileRouteTypes {
     | '/barcode-print-history'
     | '/barcode-scanner'
     | '/downloads'
+    | '/notifications'
     | '/pos'
     | '/settings'
     | '/'
@@ -236,6 +248,7 @@ export interface FileRouteTypes {
     | '/_authenticated/barcode-print-history'
     | '/_authenticated/barcode-scanner'
     | '/_authenticated/downloads'
+    | '/_authenticated/notifications'
     | '/_authenticated/pos'
     | '/_authenticated/settings'
     | '/_authenticated/'
@@ -331,6 +344,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AuthenticatedDownloadsRouteImport
       parentRoute: typeof AuthenticatedRouteRoute
     }
+    '/_authenticated/notifications': {
+      id: '/_authenticated/notifications'
+      path: '/notifications'
+      fullPath: '/notifications'
+      preLoaderRoute: typeof AuthenticatedNotificationsRouteImport
+      parentRoute: typeof AuthenticatedRouteRoute
+    }
     '/_authenticated/pos': {
       id: '/_authenticated/pos'
       path: '/pos'
@@ -391,6 +411,7 @@ interface AuthenticatedRouteRouteChildren {
   AuthenticatedBarcodePrintHistoryRoute: typeof AuthenticatedBarcodePrintHistoryRoute
   AuthenticatedBarcodeScannerRoute: typeof AuthenticatedBarcodeScannerRoute
   AuthenticatedDownloadsRoute: typeof AuthenticatedDownloadsRoute
+  AuthenticatedNotificationsRoute: typeof AuthenticatedNotificationsRoute
   AuthenticatedPosRoute: typeof AuthenticatedPosRoute
   AuthenticatedSettingsRoute: typeof AuthenticatedSettingsRoute
   AuthenticatedIndexRoute: typeof AuthenticatedIndexRoute
@@ -409,6 +430,7 @@ const AuthenticatedRouteRouteChildren: AuthenticatedRouteRouteChildren = {
   AuthenticatedBarcodePrintHistoryRoute: AuthenticatedBarcodePrintHistoryRoute,
   AuthenticatedBarcodeScannerRoute: AuthenticatedBarcodeScannerRoute,
   AuthenticatedDownloadsRoute: AuthenticatedDownloadsRoute,
+  AuthenticatedNotificationsRoute: AuthenticatedNotificationsRoute,
   AuthenticatedPosRoute: AuthenticatedPosRoute,
   AuthenticatedSettingsRoute: AuthenticatedSettingsRoute,
   AuthenticatedIndexRoute: AuthenticatedIndexRoute,

@@ -30,6 +30,26 @@ export type ErpModule = {
   path?: string;
 };
 
+export const SHEET_CONFIG: Record<string, string> = {
+  dashboard: "Dashboard",
+  company: "Company",
+  companies: "Company",
+  products: "Products",
+  stock: "Stock",
+  customers: "Customers",
+  suppliers: "Suppliers",
+  pos: "Sales",
+  sales: "Sales",
+  purchases: "Purchases",
+  collection: "Daily Collection",
+  "daily-collection": "Daily Collection",
+  expenses: "Expenses",
+  "cash-book": "Cash Book",
+  "customer-ledger": "Customer Ledger",
+  "supplier-ledger": "Supplier Ledger",
+  "profit-loss": "Profit & Loss",
+};
+
 export const MODULES: ErpModule[] = [
   { slug: "dashboard", sheet: "Dashboard", label: "Dashboard", group: "Overview", icon: LayoutDashboard },
   { slug: "company", sheet: "Company", label: "Companies", group: "Overview", icon: Building2 },
@@ -81,6 +101,8 @@ const SLUG_ALIASES: Record<string, string> = {
   "daily-collection": "collection",
   "dailycollection": "collection",
   "daily_collection": "collection",
+  companies: "company",
+  company: "company",
 };
 
 export const normalizeModuleSlug = (slug: string) => {
@@ -88,8 +110,28 @@ export const normalizeModuleSlug = (slug: string) => {
   return SLUG_ALIASES[cleaned] ?? cleaned;
 };
 
-export const getModuleBySlug = (slug: string) =>
-  MODULES.find((m) => normalizeModuleSlug(m.slug) === normalizeModuleSlug(slug));
+export function resolveSheetConfig(slug: string): ErpModule | null {
+  const normalized = normalizeModuleSlug(slug);
+  const key = SLUG_ALIASES[normalized] ?? normalized;
+  const sheetName = SHEET_CONFIG[key];
+  if (!sheetName) return null;
+
+  const existing = MODULES.find((m) => normalizeModuleSlug(m.slug) === key);
+  if (existing) return existing;
+
+  return {
+    slug: key,
+    sheet: sheetName,
+    label: key
+      .split("-")
+      .map((segment) => segment.charAt(0).toUpperCase() + segment.slice(1))
+      .join(" "),
+    group: "Masters",
+    icon: Package,
+  };
+}
+
+export const getModuleBySlug = (slug: string) => resolveSheetConfig(slug);
 export const getModuleBySheet = (sheet: string) => MODULES.find((m) => m.sheet === sheet);
 
 export const GROUPS: ErpModule["group"][] = ["Overview", "Masters", "Transactions", "Accounts"];

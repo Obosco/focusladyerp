@@ -13,6 +13,7 @@ let isQuitting = false;
 
 function getIconPath() {
   const candidates = [
+    path.join(__dirname, "public", "focus lady logo.png"),
     path.join(__dirname, "public", "icon-512.png"),
     path.join(__dirname, "public", "focus-lady-logo.svg"),
     path.join(__dirname, "public", "favicon.ico"),

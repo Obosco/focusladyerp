@@ -5,18 +5,23 @@ import { cn } from "@/lib/utils";
 import {
   ArrowLeft,
   BarChart3,
+  Bell,
   Bot,
   ExternalLink,
   FilePlus2,
   LogOut,
   Receipt,
+  RefreshCcw,
   Settings,
 } from "lucide-react";
 import { signOutClean } from "@/lib/session";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import type { ReactNode } from "react";
+import { useMemo, useState, type ReactNode } from "react";
 import InstallButton from "@/components/install-button";
 import { getSheetsConnection } from "@/lib/sheets.functions";
+import { getLastSyncLabel, setLastSyncStamp } from "@/lib/erp-cache";
+import { getNotifications, markAllNotificationsRead, markNotificationRead } from "@/lib/notifications";
+import { toast } from "sonner";
 
 
 function NavItem({ mod, active }: { mod: ErpModule; active: boolean }) {
@@ -54,11 +59,36 @@ export function ErpShell({
   const path = useRouterState({ select: (s) => s.location.pathname });
   const navigate = useNavigate();
   const queryClient = useQueryClient();
+  const [isRefreshing, setIsRefreshing] = useState(false);
+  const [showNotifications, setShowNotifications] = useState(false);
+  const lastSyncLabel = getLastSyncLabel();
+  const notifications = useMemo(() => getNotifications().slice(0, 6), []);
+  const unreadCount = useMemo(
+    () => notifications.filter((notification) => !notification.read).length,
+    [notifications],
+  );
   const { data: sheetsConnection } = useQuery({
     queryKey: ["erp", "sheets-connection"],
     queryFn: () => getSheetsConnection(),
     staleTime: 5 * 60_000,
   });
+
+  async function handleRefresh() {
+    if (isRefreshing) return;
+    setIsRefreshing(true);
+    try {
+      await queryClient.invalidateQueries({ queryKey: ["erp"] });
+      await queryClient.refetchQueries({ queryKey: ["erp"], type: "active" });
+      setLastSyncStamp(Date.now());
+      toast.success("Updated just now");
+    } catch (error) {
+      toast.error(
+        error instanceof Error ? error.message : "Could not refresh Focus Lady ERP data.",
+      );
+    } finally {
+      setIsRefreshing(false);
+    }
+  }
 
   async function handleSignOut() {
     await queryClient.cancelQueries();
@@ -197,6 +227,69 @@ export function ErpShell({
                 </div>
               </div>
               <div className="flex items-center gap-2">
+                <div className="hidden items-center gap-1 rounded-md border border-border bg-muted/30 px-2 py-1 text-[10px] text-muted-foreground md:flex">
+                  <span>Last sync</span>
+                  <span className="font-medium text-foreground">{lastSyncLabel}</span>
+                </div>
+                <div className="relative">
+                  <button
+                    type="button"
+                    aria-label="Notifications"
+                    onClick={() => setShowNotifications((value) => !value)}
+                    className="relative inline-flex h-9 w-9 items-center justify-center rounded-md border border-border bg-background text-muted-foreground transition-colors hover:text-foreground"
+                  >
+                    <Bell className="h-4 w-4" />
+                    {unreadCount > 0 ? (
+                      <span className="absolute -right-1 -top-1 flex h-5 min-w-5 items-center justify-center rounded-full bg-primary px-1 text-[10px] font-medium text-primary-foreground">
+                        {unreadCount}
+                      </span>
+                    ) : null}
+                  </button>
+                  {showNotifications ? (
+                    <div className="absolute right-0 top-12 z-20 w-80 rounded-xl border border-border bg-popover p-3 shadow-lg">
+                      <div className="mb-2 flex items-center justify-between">
+                        <span className="text-sm font-semibold">Notifications</span>
+                        <button
+                          type="button"
+                          onClick={() => markAllNotificationsRead()}
+                          className="text-xs text-muted-foreground hover:text-foreground"
+                        >
+                          Mark all read
+                        </button>
+                      </div>
+                      <div className="max-h-80 space-y-2 overflow-y-auto">
+                        {notifications.length === 0 ? (
+                          <p className="text-sm text-muted-foreground">No notifications.</p>
+                        ) : (
+                          notifications.map((notification) => (
+                            <button
+                              key={notification.id}
+                              type="button"
+                              onClick={() => {
+                                markNotificationRead(notification.id);
+                                setShowNotifications(false);
+                              }}
+                              className={cn(
+                                "block w-full rounded-lg border p-2 text-left transition-colors",
+                                notification.read ? "border-border bg-background" : "border-primary/30 bg-primary/5",
+                              )}
+                            >
+                              <div className="flex items-center justify-between gap-2">
+                                <span className="text-sm font-medium">{notification.title}</span>
+                                {!notification.read ? <span className="h-2.5 w-2.5 rounded-full bg-primary" /> : null}
+                              </div>
+                              <p className="mt-1 text-xs text-muted-foreground">{notification.message}</p>
+                            </button>
+                          ))
+                        )}
+                      </div>
+                    </div>
+                  ) : null}
+                </div>
+                <Button variant="outline" size="sm" onClick={handleRefresh} disabled={isRefreshing}>
+                  <RefreshCcw className={cn("mr-2 h-4 w-4", isRefreshing && "animate-spin")} />
+                  {isRefreshing ? "Refreshing..." : "↻ Refresh"}
+                </Button>
                 <InstallButton compact />
                 {actions}
               </div>

@@ -56,7 +56,8 @@ function DownloadsPage() {
 
 function HistoryView() {
   const { data } = useSuspenseQuery(historyQuery);
-  const headers = data.values[0] ?? [
+  const values = Array.isArray(data?.values) ? data.values : Array.isArray(data?.data) ? data.data : [];
+  const headers = Array.isArray(values[0]) ? values[0].map((cell) => String(cell ?? "")) : [
     "Timestamp",
     "Type",
     "Reference",
@@ -64,7 +65,7 @@ function HistoryView() {
     "Format",
     "Note",
   ];
-  const rows = data.values.slice(1).reverse();
+  const rows = values.slice(1).filter(Array.isArray).reverse();
   return (
     <SheetTable
       headers={headers}

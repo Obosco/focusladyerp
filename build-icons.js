@@ -4,29 +4,60 @@ import sharp from 'sharp';
 import { fileURLToPath } from 'node:url';
 
 const root = path.dirname(fileURLToPath(import.meta.url));
-const svgPath = path.join(root, 'public', 'focus-lady-logo.svg');
+const publicDir = path.join(root, 'public');
 const outDir = path.join(root, 'build-icons');
+
+const logoCandidates = [
+  path.join(publicDir, 'focus lady logo.png'),
+  path.join(publicDir, 'focus-lady-logo.png'),
+  path.join(publicDir, 'focus-lady-logo.svg'),
+];
+
+const logoPath = logoCandidates.find((candidate) => fs.existsSync(candidate));
+
+if (!logoPath) {
+  console.error('No logo asset found in public/. Expected focus lady logo.png or focus-lady-logo.svg.');
+  process.exit(1);
+}
 
 fs.mkdirSync(outDir, { recursive: true });
 
-const svg = fs.readFileSync(svgPath, 'utf8');
-const safeSvg = svg.replace(/<\?xml[^>]*\?>/g, '').trim();
+const baseLogoName = path.basename(logoPath);
+const sizes = [
+  { fileName: 'icon-512.png', size: 512 },
+  { fileName: 'icon-192.png', size: 192 },
+  { fileName: 'icon-maskable-512.png', size: 512 },
+  { fileName: 'apple-touch-icon.png', size: 180 },
+  { fileName: 'favicon-32.png', size: 32 },
+];
 
-const iconData = {
-  fileName: 'focus-lady-logo.svg',
+const iconInfo = {
+  fileName: baseLogoName,
   width: 512,
   height: 512,
-  content: safeSvg,
 };
 
-fs.writeFileSync(path.join(outDir, 'icon-info.json'), JSON.stringify(iconData, null, 2));
+fs.writeFileSync(path.join(outDir, 'icon-info.json'), JSON.stringify(iconInfo, null, 2));
 
-sharp(Buffer.from(safeSvg))
-  .resize(512, 512, { fit: 'contain', background: { r: 0, g: 0, b: 0, alpha: 0 } })
-  .png()
-  .toFile(path.join(root, 'public', 'icon-512.png'))
-  .then(() => console.log('Generated public/icon-512.png from the FocusLady logo.'))
-  .catch((error) => {
-    console.error('Failed to generate the desktop icon:', error);
-    process.exitCode = 1;
-  });
+const logoBuffer = fs.readFileSync(logoPath);
+
+async function generateIcons() {
+  for (const { fileName, size } of sizes) {
+    await sharp(logoBuffer)
+      .resize(size, size, { fit: 'contain', background: { r: 255, g: 255, b: 255, alpha: 0 } })
+      .png()
+      .toFile(path.join(publicDir, fileName));
+  }
+
+  const favicon = await sharp(logoBuffer).resize(32, 32, { fit: 'contain', background: { r: 255, g: 255, b: 255, alpha: 0 } }).png().toBuffer();
+  const pngToIco = (await import('png-to-ico')).default;
+  const icoBuffer = await pngToIco(favicon);
+  fs.writeFileSync(path.join(publicDir, 'favicon.ico'), icoBuffer);
+
+  console.log('Regenerated app icons from the provided logo asset.');
+}
+
+generateIcons().catch((error) => {
+  console.error('Failed to generate the app icons:', error);
+  process.exitCode = 1;
+});

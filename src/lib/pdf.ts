@@ -97,7 +97,7 @@ export async function exportInvoicePdf(inv: InvoiceDoc) {
   const pageWidth = doc.internal.pageSize.getWidth();
 
   if (logoDataUrl) {
-    const logoSize = 42;
+    const logoSize = 48;
     doc.addImage(logoDataUrl, "PNG", margin, 34, logoSize, logoSize);
   }
 
