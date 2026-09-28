@@ -51,3 +51,14 @@ service-account*.json
 out/
 desktop-release/
 focuslady-dist/
+
+# Electron build files
+latest-release/
+win-unpacked/
+win-unpacked.tmp/
+desktop-release/
+focuslady-dist/
+out/
+release/
+dist/
+node_modules/
