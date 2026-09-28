@@ -135,6 +135,27 @@ export function ErpShell({
               </div>
             </div>
 
+            <div className="mb-4">
+              <div className="mb-1 px-3 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">Sales</div>
+              <div className="flex flex-col gap-0.5">
+                {[
+                  { to: "/dealer-orders/", label: "All Dealer Orders", Icon: Receipt },
+                  { to: "/dealer-orders/new", label: "New Dealer Order", Icon: FilePlus2 },
+                  { to: "/dealer-orders/portal", label: "Dealer Ordering", Icon: Store },
+                ].map((item) => (
+                  <Link key={item.to} to={item.to} className={cn(
+                    "flex items-center gap-2 rounded-md px-3 py-2 text-sm transition-colors",
+                    path.startsWith(item.to === "/dealer-orders/" ? "/dealer-orders" : item.to)
+                      ? "bg-sidebar-primary text-sidebar-primary-foreground"
+                      : "text-sidebar-foreground hover:bg-sidebar-accent hover:text-sidebar-accent-foreground",
+                  )}>
+                    <item.Icon className="h-4 w-4 shrink-0" />
+                    <span className="truncate">{item.label}</span>
+                  </Link>
+                ))}
+              </div>
+            </div>
+
             <Link
               to="/assistant"
               className={cn(

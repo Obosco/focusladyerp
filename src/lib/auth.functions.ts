@@ -10,6 +10,7 @@ import {
   registerMemberAccount,
   resetMemberPassword,
   verifyCredentials,
+  getUserRoleForEmail,
 } from "./auth.server";
 
 export const getAuthSession = createServerFn({ method: "GET" }).handler(async () => {
@@ -45,6 +46,12 @@ export const signOut = createServerFn({ method: "POST" }).handler(async () => {
 
 export const getMemberAccounts = createServerFn({ method: "GET" }).handler(async () => {
   return { accounts: await listMemberAccounts() };
+});
+
+export const getCurrentUserRole = createServerFn({ method: "GET" }).handler(async () => {
+  const email = readSessionEmail();
+  if (!email) return { role: "Sales" };
+  return { role: getUserRoleForEmail(email) };
 });
 
 export const addMemberAccount = createServerFn({ method: "POST" })

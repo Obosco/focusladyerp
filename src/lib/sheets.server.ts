@@ -111,6 +111,8 @@ const DEFAULT_SHEET_HEADERS: Record<string, string[]> = {
   "Barcode Print History": ["Print ID", "Barcode", "Product ID", "Variant ID", "Product Name", "Quantity", "Template", "Printer Type", "Printed By", "Printed At"],
   "POS Held Bills": ["Hold ID", "Customer ID", "Customer Name", "Items JSON", "Subtotal", "Discount", "Tax", "Total", "Created By", "Created At", "Updated At", "Status"],
   "POS Payments": ["Payment ID", "Invoice ID", "Payment Method", "Amount", "Reference", "Payment Date", "Created By"],
+  "Dealer Orders": ["Order ID", "Dealer ID", "Dealer Name", "Status", "Created At", "Created By", "Updated At", "Updated By", "Delivery Address", "City", "District", "PIN Code", "Required Delivery Date", "Delivery Method", "Payment Method", "Payment Reference", "Advance", "Subtotal", "Discount", "Tax", "Grand Total", "Total Quantity", "Notes", "Timeline"],
+  "Dealer Order Items": ["Order ID", "Product ID", "Product", "SKU", "Barcode", "Size", "Cup Size", "Color", "Quantity", "Available Stock", "Unit Price", "Discount", "Line Total"],
   Returns: ["Return ID", "Date", "Invoice", "Customer", "Product", "Size", "Color", "Qty", "Amount", "Type", "Reason"],
   "Audit History": ["Audit ID", "Timestamp", "User ID", "User Name", "Action", "Module", "Record ID", "Product ID", "Variant ID", "Barcode", "Old Value", "New Value", "Description", "Device", "Status"],
   Users: ["User ID", "Full Name", "Email", "Mobile Number", "Role", "Status", "Department", "Employee ID", "Profile Image URL", "Created At", "Created By", "Activated At", "Last Login At", "Last Password Change At", "Session Revoked At", "Failed Login Attempts", "Locked Until", "Email Verified", "Updated At"],
@@ -603,7 +605,7 @@ async function readCustomers(): Promise<CustomerRecord[]> {
   });
 }
 
-async function resolveCustomer(input: InvoiceInput) {
+async function resolveCustomer(input: InvoiceInput, customerType: CustomerInput["type"] = "Retail") {
   const customers = await readCustomers();
   const name = normalizeCustomerText(input.customer);
   const phone = normalizePhone(input.customerPhone);
@@ -619,7 +621,7 @@ async function resolveCustomer(input: InvoiceInput) {
   const sheetRow = next + 1;
   await appendRows("Customers!A:T", [[
     id, input.customer.trim().replace(/\s+/g, " "), input.customerPhone ?? "", input.customerAddress ?? "",
-    input.customerCity ?? "", input.customerState ?? "", input.gstin ?? "", "Retail", "0", "0", "", input.notes ?? "", "TRUE",
+    input.customerCity ?? "", input.customerState ?? "", input.gstin ?? "", customerType ?? "Retail", "0", "0", "", input.notes ?? "", "TRUE",
     new Date().toISOString(), input.date, paidDate(input.paid, input.date),
     `=COUNTIF(Sales!Q:Q,A${sheetRow})`, `=SUMIF(Sales!Q:Q,A${sheetRow},Sales!F:F)`,
     `=SUMIF(Sales!Q:Q,A${sheetRow},Sales!G:G)`, `=R${sheetRow}-S${sheetRow}`,
@@ -645,7 +647,290 @@ export async function createCustomer(c: CustomerInput) {
     discount: 0,
     paid: 0,
     notes: "",
+  }, c.type);
+}
+
+export type DealerInput = CustomerInput;
+
+export type DealerOrderInput = {
+  dealerId: string;
+  dealerName: string;
+  items: Array<{
+    productId: string;
+    productName: string;
+    sku: string;
+    barcode?: string;
+    size?: string;
+    cupSize?: string;
+    color?: string;
+    qty: number;
+    unitPrice: number;
+    discount: number;
+  }>;
+  address: string;
+  city: string;
+  district: string;
+  pinCode: string;
+  requiredDeliveryDate: string;
+  deliveryMethod: "Normal" | "Urgent" | "Warehouse Pickup";
+  paymentMethod: "Cash" | "UPI" | "Bank Transfer" | "Credit" | "Advance";
+  paymentReference?: string;
+  advance: number;
+  notes?: string;
+  confirmed: boolean;
+  allowBackorder?: boolean;
+};
+
+export async function createDealer(input: DealerInput) {
+  await ensureSheet("Customers", DEFAULT_SHEET_HEADERS.Customers);
+  const dealerType = input.type === "Bulk" ? "Bulk" : "Wholesale";
+  const customers = await readCustomers();
+  const phone = normalizePhone(input.phone);
+  const name = normalizeCustomerText(input.name);
+  const existing = customers.find((customer) =>
+    (name && normalizeCustomerText(customer.name) === name) ||
+    (phone && normalizePhone(customer.phone) === phone),
+  );
+  if (existing) {
+    if (existing.type !== "Wholesale" && existing.type !== "Bulk") {
+      await updateRange(`Customers!H${existing.row}:H${existing.row}`, [[dealerType]]);
+    }
+    return { ...existing, type: dealerType, created: false };
+  }
+  const result = await createCustomer({ ...input, type: dealerType });
+  return { ...result, id: result.id };
+}
+
+type DealerOrderActor = { email: string; role: string };
+type DealerOrderRecord = {
+  orderId: string;
+  dealerId: string;
+  dealerName: string;
+  status: string;
+  createdAt: string;
+  createdBy: string;
+  updatedAt: string;
+  updatedBy: string;
+  deliveryAddress: string;
+  city: string;
+  district: string;
+  pinCode: string;
+  requiredDeliveryDate: string;
+  deliveryMethod: string;
+  paymentMethod: string;
+  paymentReference: string;
+  advance: number;
+  subtotal: number;
+  discount: number;
+  tax: number;
+  grandTotal: number;
+  totalQuantity: number;
+  notes: string;
+  timeline: Array<{ status: string; at: string; by: string; note?: string }>;
+  items: Array<DealerOrderInput["items"][number] & { availableStock: number; lineTotal: number }>;
+};
+
+const dealerNumber = (value: unknown) => {
+  const number = Number(String(value ?? "").replace(/[^\d.-]/g, ""));
+  return Number.isFinite(number) ? number : 0;
+};
+
+async function appendDealerOrderAudit(actor: DealerOrderActor, action: string, orderId: string, description: string, oldValue = "", newValue = "") {
+  await ensureSheet("Audit History", DEFAULT_SHEET_HEADERS["Audit History"]);
+  const now = new Date().toISOString();
+  await appendRows("'Audit History'!A:O", [[
+    `AUD-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
+    now,
+    actor.email,
+    actor.email,
+    action,
+    "Dealer Orders",
+    orderId,
+    "",
+    "",
+    "",
+    oldValue,
+    newValue,
+    description,
+    "Web",
+    "Success",
+  ]]);
+}
+
+function parseDealerOrderRow(row: string[]): Omit<DealerOrderRecord, "items"> {
+  let timeline: DealerOrderRecord["timeline"] = [];
+  try { timeline = JSON.parse(String(row[23] ?? "[]")) as DealerOrderRecord["timeline"]; } catch { /* tolerate older or malformed history */ }
+  return {
+    orderId: String(row[0] ?? ""), dealerId: String(row[1] ?? ""), dealerName: String(row[2] ?? ""),
+    status: String(row[3] ?? "Pending"), createdAt: String(row[4] ?? ""), createdBy: String(row[5] ?? ""),
+    updatedAt: String(row[6] ?? ""), updatedBy: String(row[7] ?? ""), deliveryAddress: String(row[8] ?? ""),
+    city: String(row[9] ?? ""), district: String(row[10] ?? ""), pinCode: String(row[11] ?? ""),
+    requiredDeliveryDate: String(row[12] ?? ""), deliveryMethod: String(row[13] ?? ""),
+    paymentMethod: String(row[14] ?? ""), paymentReference: String(row[15] ?? ""), advance: dealerNumber(row[16]),
+    subtotal: dealerNumber(row[17]), discount: dealerNumber(row[18]), tax: dealerNumber(row[19]),
+    grandTotal: dealerNumber(row[20]), totalQuantity: dealerNumber(row[21]), notes: String(row[22] ?? ""), timeline,
+  };
+}
+
+async function readDealerOrderRecords(): Promise<DealerOrderRecord[]> {
+  await ensureSheet("Dealer Orders", DEFAULT_SHEET_HEADERS["Dealer Orders"]);
+  await ensureSheet("Dealer Order Items", DEFAULT_SHEET_HEADERS["Dealer Order Items"]);
+  const [orders, items] = await Promise.all([
+    readRange("'Dealer Orders'!A2:X5000"),
+    readRange("'Dealer Order Items'!A2:M20000"),
+  ]);
+  const itemsByOrder = new Map<string, DealerOrderRecord["items"]>();
+  for (const row of items) {
+    const orderId = String(row[0] ?? "");
+    if (!orderId) continue;
+    const orderItems = itemsByOrder.get(orderId) ?? [];
+    orderItems.push({
+      productId: String(row[1] ?? ""), productName: String(row[2] ?? ""), sku: String(row[3] ?? ""),
+      barcode: String(row[4] ?? ""), size: String(row[5] ?? ""), cupSize: String(row[6] ?? ""), color: String(row[7] ?? ""),
+      qty: dealerNumber(row[8]), availableStock: dealerNumber(row[9]), unitPrice: dealerNumber(row[10]),
+      discount: dealerNumber(row[11]), lineTotal: dealerNumber(row[12]),
+    });
+    itemsByOrder.set(orderId, orderItems);
+  }
+  return orders.filter((row) => row[0]).map((row) => {
+    const order = parseDealerOrderRow(row);
+    return { ...order, items: itemsByOrder.get(order.orderId) ?? [] };
+  }).reverse();
+}
+
+export async function getDealerOrders() {
+  return readDealerOrderRecords();
+}
+
+export async function getDealerOrderById(orderId: string) {
+  return (await readDealerOrderRecords()).find((order) => order.orderId === orderId) ?? null;
+}
+
+export async function createDealerOrder(input: DealerOrderInput, actor: DealerOrderActor) {
+  if (!input.confirmed) throw new Error("Confirm the order details before submitting.");
+  if (!input.dealerId?.trim() || !input.dealerName?.trim()) throw new Error("Select a valid dealer.");
+  if (!Array.isArray(input.items) || input.items.length === 0 || input.items.length > 500) throw new Error("Add between one and 500 product lines.");
+  if (!["Normal", "Urgent", "Warehouse Pickup"].includes(input.deliveryMethod)) throw new Error("Select a valid delivery method.");
+  if (!["Cash", "UPI", "Bank Transfer", "Credit", "Advance"].includes(input.paymentMethod)) throw new Error("Select a valid payment method.");
+  if (![input.address, input.city, input.district, input.pinCode, input.requiredDeliveryDate].every((value) => typeof value === "string" && value.trim())) throw new Error("Complete all required delivery details.");
+  if (!/^\d{4,10}$/.test(input.pinCode.trim())) throw new Error("Enter a valid PIN code.");
+  if (!Number.isFinite(input.advance) || input.advance < 0) throw new Error("Advance must be a valid non-negative amount.");
+  const distinctLines = new Set<string>();
+  for (const item of input.items) {
+    if (!item.productId?.trim() || !item.productName?.trim()) throw new Error("Each line must reference an existing product.");
+    if (!Number.isFinite(item.qty) || item.qty < 1 || !Number.isFinite(item.unitPrice) || item.unitPrice < 0) throw new Error("Order quantities and prices must be valid non-negative numbers.");
+    if (!Number.isFinite(item.discount) || item.discount < 0 || item.discount > item.qty * item.unitPrice) throw new Error(`Discount is invalid for ${item.productName}.`);
+    const lineKey = `${item.productId}|${item.sku}`;
+    if (distinctLines.has(lineKey)) throw new Error("Remove duplicate product lines before submitting.");
+    distinctLines.add(lineKey);
+  }
+  const role = actor.role.toLowerCase();
+  const canBackorder = role === "admin" || role === "manager";
+  const [customers, products, variants, settings, existingOrders] = await Promise.all([
+    readRange("Customers!A2:T5000"), readRange("Products!A2:Q2000"),
+    readRange("'Product Variants'!A2:Q2000"), readSettings(), readDealerOrderRecords(),
+  ]);
+  const dealer = customers.find((row) => String(row[0] ?? "") === input.dealerId && String(row[1] ?? "").trim());
+  if (!dealer || !["wholesale", "bulk"].includes(String(dealer[7] ?? "Retail").toLowerCase())) {
+    throw new Error("Select an existing wholesale or bulk dealer.");
+  }
+  const normalizedItems = input.items.map((item) => {
+    const product = products.find((row) => String(row[0] ?? "") === item.productId);
+    const variant = variants.find((row) => String(row[1] ?? "") === item.productId && (String(row[3] ?? "") === item.sku || (item.barcode && String(row[4] ?? "") === item.barcode)));
+    if (!product) throw new Error(`${item.productName} is no longer in the product catalog.`);
+    const isBaseProduct = item.sku === item.productId || (item.barcode && item.barcode === String(product[6] ?? ""));
+    if (!variant && !isBaseProduct) throw new Error(`${item.productName} SKU/barcode is no longer in the product catalog.`);
+    const available = variant ? dealerNumber(variant[11]) : dealerNumber(product[7]);
+    if (item.qty > available && (!canBackorder || !input.allowBackorder)) {
+      throw new Error(`Insufficient stock for ${item.productName}. Available: ${available}; requested: ${item.qty}.`);
+    }
+    const unitPrice = variant ? dealerNumber(variant[10]) || dealerNumber(product[9]) : dealerNumber(product[9]);
+    if (item.discount > item.qty * unitPrice) throw new Error(`Discount exceeds line value for ${item.productName}.`);
+    return { ...item, unitPrice, availableStock: available, lineTotal: Math.max(item.qty * unitPrice - item.discount, 0) };
   });
+  const fingerprint = `${input.dealerId}|${normalizedItems.map((item) => `${item.productId}:${item.sku}:${item.qty}`).sort().join(",")}|${normalizedItems.reduce((sum, item) => sum + item.lineTotal, 0).toFixed(2)}`;
+  const justNow = Date.now() - 120_000;
+  if (existingOrders.some((order) => order.dealerId === input.dealerId && Date.parse(order.createdAt) >= justNow && `${order.dealerId}|${order.items.map((item) => `${item.productId}:${item.sku}:${item.qty}`).sort().join(",")}|${order.items.reduce((sum, item) => sum + item.lineTotal, 0).toFixed(2)}` === fingerprint)) {
+    throw new Error("A matching order was submitted recently. Check the order list before retrying.");
+  }
+  const subtotal = normalizedItems.reduce((sum, item) => sum + item.qty * item.unitPrice, 0);
+  const discount = normalizedItems.reduce((sum, item) => sum + item.discount, 0);
+  const tax = Math.max(subtotal - discount, 0) * settings.defaultGstPercent / 100;
+  const grandTotal = Math.max(subtotal - discount + tax, 0);
+  if (input.advance > grandTotal) throw new Error("Advance payment cannot exceed the order total.");
+  const totalQuantity = normalizedItems.reduce((sum, item) => sum + item.qty, 0);
+  const orderId = `SO-${String(existingOrders.reduce((max, order) => Math.max(max, Number(order.orderId.slice(3)) || 0), 0) + 1).padStart(6, "0")}`;
+  const now = new Date().toISOString();
+  const timeline = [{ status: "Pending", at: now, by: actor.email }];
+  await appendRows("'Dealer Orders'!A:X", [[
+    orderId, dealer[0], dealer[1], "Pending", now, actor.email, now, actor.email, input.address, input.city,
+    input.district, input.pinCode, input.requiredDeliveryDate, input.deliveryMethod, input.paymentMethod,
+    input.paymentReference ?? "", String(input.advance), String(subtotal), String(discount), String(tax),
+    String(grandTotal), String(totalQuantity), input.notes ?? "", JSON.stringify(timeline),
+  ]]);
+  await appendRows("'Dealer Order Items'!A:M", normalizedItems.map((item) => [
+    orderId, item.productId, item.productName, item.sku, item.barcode ?? "", item.size ?? "", item.cupSize ?? "",
+    item.color ?? "", String(item.qty), String(item.availableStock), String(item.unitPrice), String(item.discount), String(item.lineTotal),
+  ]));
+  await appendDealerOrderAudit(actor, "CREATE", orderId, `Created dealer order for ${dealer[1]}.`, "", "Pending");
+  return { orderId, dealerName: String(dealer[1]), status: "Pending", subtotal, discount, tax, grandTotal, totalQuantity, items: normalizedItems };
+}
+
+export async function updateDealerOrderStatus(orderId: string, status: string, note: string | undefined, actor: DealerOrderActor) {
+  const order = await getDealerOrderById(orderId);
+  if (!order) throw new Error("Dealer order not found.");
+  const allowed = ["Pending", "Confirmed", "Packing", "Dispatched", "Delivered", "Cancelled", "Returned"];
+  if (!allowed.includes(status)) throw new Error("Invalid dealer order status.");
+  const role = actor.role.toLowerCase();
+  if ((status === "Confirmed" || status === "Cancelled" || status === "Returned") && role !== "admin" && role !== "manager") {
+    throw new Error("Only an Admin or Manager can approve, cancel, or mark an order returned.");
+  }
+  const nextStatus: Record<string, string> = { Pending: "Confirmed", Confirmed: "Packing", Packing: "Dispatched", Dispatched: "Delivered", Delivered: "Returned" };
+  if (status !== "Cancelled" && status !== nextStatus[order.status]) {
+    throw new Error(`An order in ${order.status} status cannot move to ${status}.`);
+  }
+  if (status === "Cancelled" && ["Dispatched", "Delivered"].includes(order.status)) {
+    throw new Error("Dispatched or delivered orders cannot be cancelled.");
+  }
+  if (order.status === "Delivered" || order.status === "Cancelled" || order.status === "Returned") {
+    throw new Error(`Orders in ${order.status} status cannot be changed.`);
+  }
+  const rows = await readRange("'Dealer Orders'!A2:X5000");
+  const rowNumber = rows.findIndex((row) => String(row[0] ?? "") === orderId) + 2;
+  if (rowNumber < 2) throw new Error("Dealer order not found.");
+  const now = new Date().toISOString();
+  const timeline = [...order.timeline, { status, at: now, by: actor.email, note }];
+  await updateRange(`'Dealer Orders'!D${rowNumber}:H${rowNumber}`, [[status, order.createdAt, order.createdBy, now, actor.email]]);
+  await updateRange(`'Dealer Orders'!X${rowNumber}:X${rowNumber}`, [[JSON.stringify(timeline)]]);
+  await appendDealerOrderAudit(actor, "STATUS_UPDATE", orderId, note || `Status changed to ${status}.`, order.status, status);
+  return { orderId, status, timeline };
+}
+
+export type DealerOrderDetailsUpdate = Pick<DealerOrderInput, "address" | "city" | "district" | "pinCode" | "requiredDeliveryDate" | "deliveryMethod" | "paymentMethod" | "paymentReference" | "advance" | "notes">;
+
+export async function updateDealerOrderDetails(orderId: string, input: DealerOrderDetailsUpdate, actor: DealerOrderActor) {
+  const role = actor.role.toLowerCase();
+  if (role !== "admin" && role !== "manager") throw new Error("Only an Admin or Manager can edit order details.");
+  const order = await getDealerOrderById(orderId);
+  if (!order) throw new Error("Dealer order not found.");
+  if (["Delivered", "Cancelled", "Returned"].includes(order.status)) throw new Error(`Orders in ${order.status} status cannot be edited.`);
+  if (![input.address, input.city, input.district, input.pinCode, input.requiredDeliveryDate].every((value) => typeof value === "string" && value.trim())) throw new Error("Complete all required delivery details.");
+  if (!/^\d{4,10}$/.test(input.pinCode.trim())) throw new Error("Enter a valid PIN code.");
+  if (!["Normal", "Urgent", "Warehouse Pickup"].includes(input.deliveryMethod)) throw new Error("Select a valid delivery method.");
+  if (!["Cash", "UPI", "Bank Transfer", "Credit", "Advance"].includes(input.paymentMethod)) throw new Error("Select a valid payment method.");
+  if (!Number.isFinite(input.advance) || input.advance < 0 || input.advance > order.grandTotal) throw new Error("Advance must be between zero and the order total.");
+  const rows = await readRange("'Dealer Orders'!A2:X5000");
+  const rowNumber = rows.findIndex((row) => String(row[0] ?? "") === orderId) + 2;
+  if (rowNumber < 2) throw new Error("Dealer order not found.");
+  const now = new Date().toISOString();
+  await updateRange(`'Dealer Orders'!I${rowNumber}:Q${rowNumber}`, [[
+    input.address.trim(), input.city.trim(), input.district.trim(), input.pinCode.trim(), input.requiredDeliveryDate,
+    input.deliveryMethod, input.paymentMethod, input.paymentReference ?? "", String(input.advance),
+  ]]);
+  await updateRange(`'Dealer Orders'!W${rowNumber}:W${rowNumber}`, [[input.notes ?? ""]]);
+  await updateRange(`'Dealer Orders'!G${rowNumber}:H${rowNumber}`, [[now, actor.email]]);
+  await appendDealerOrderAudit(actor, "UPDATE", orderId, "Updated dealer order delivery/payment details.", "", "Order details updated");
+  return { orderId, updatedAt: now, updatedBy: actor.email };
 }
 
 /* ---------------------------------- invoices --------------------------------- */

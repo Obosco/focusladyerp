@@ -259,6 +259,12 @@ export function isAdminEmail(email: string) {
   return getAdminEmails().includes(normalizedEmail) || normalizedEmail === "admin";
 }
 
+export async function getUserRoleForEmail(email: string) {
+  if (isAdminEmail(email)) return "Admin";
+  const user = await getUserByEmail(email);
+  return user?.role || "Sales";
+}
+
 export async function listMemberAccounts() {
   const users = await getUsersSheetRecords();
   return users.map((user) => ({

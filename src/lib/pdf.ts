@@ -24,6 +24,7 @@ export function recordDownload(entry: {
 export function exportTablePdf(opts: {
   title: string;
   subtitle?: string;
+  details?: Array<[string, string]>;
   headers: string[];
   rows: string[][];
   filename: string;
@@ -33,10 +34,15 @@ export function exportTablePdf(opts: {
   doc.text(opts.title, 40, 40);
   doc.setFontSize(9);
   doc.text(opts.subtitle ?? `Focus Lady Bra ERP — ${new Date().toLocaleString()}`, 40, 56);
+  const pageWidth = doc.internal.pageSize.getWidth();
+  const detailLines = (opts.details ?? []).flatMap(([label, value]) =>
+    doc.splitTextToSize(`${label}: ${value}`, pageWidth - 80),
+  );
+  if (detailLines.length) doc.text(detailLines, 40, 76);
   autoTable(doc, {
     head: [opts.headers.map((h, i) => h || `Col ${i + 1}`)],
     body: opts.rows,
-    startY: 70,
+    startY: detailLines.length ? 84 + detailLines.length * 11 : 70,
     styles: { fontSize: 8, cellPadding: 4 },
     headStyles: { fillColor: [30, 30, 40] },
   });

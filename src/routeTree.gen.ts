@@ -23,6 +23,10 @@ import { Route as AuthenticatedDownloadsRouteImport } from './routes/_authentica
 import { Route as AuthenticatedNotificationsRouteImport } from './routes/_authenticated/notifications'
 import { Route as AuthenticatedPosRouteImport } from './routes/_authenticated/pos'
 import { Route as AuthenticatedSettingsRouteImport } from './routes/_authenticated/settings'
+import { Route as AuthenticatedDealerOrdersIndexRouteImport } from './routes/_authenticated/dealer-orders.index'
+import { Route as AuthenticatedDealerOrdersOrderIdRouteImport } from './routes/_authenticated/dealer-orders.$orderId'
+import { Route as AuthenticatedDealerOrdersNewRouteImport } from './routes/_authenticated/dealer-orders.new'
+import { Route as AuthenticatedDealerOrdersPortalRouteImport } from './routes/_authenticated/dealer-orders.portal'
 import { Route as AuthenticatedInvoicesIndexRouteImport } from './routes/_authenticated/invoices.index'
 import { Route as AuthenticatedInvoicesInvoiceRouteImport } from './routes/_authenticated/invoices.$invoice'
 import { Route as AuthenticatedInvoicesNewRouteImport } from './routes/_authenticated/invoices.new'
@@ -103,6 +107,30 @@ const AuthenticatedSettingsRoute = AuthenticatedSettingsRouteImport.update({
   path: '/settings',
   getParentRoute: () => AuthenticatedRouteRoute,
 } as any)
+const AuthenticatedDealerOrdersIndexRoute =
+  AuthenticatedDealerOrdersIndexRouteImport.update({
+    id: '/dealer-orders/',
+    path: '/dealer-orders/',
+    getParentRoute: () => AuthenticatedRouteRoute,
+  } as any)
+const AuthenticatedDealerOrdersOrderIdRoute =
+  AuthenticatedDealerOrdersOrderIdRouteImport.update({
+    id: '/dealer-orders/$orderId',
+    path: '/dealer-orders/$orderId',
+    getParentRoute: () => AuthenticatedRouteRoute,
+  } as any)
+const AuthenticatedDealerOrdersNewRoute =
+  AuthenticatedDealerOrdersNewRouteImport.update({
+    id: '/dealer-orders/new',
+    path: '/dealer-orders/new',
+    getParentRoute: () => AuthenticatedRouteRoute,
+  } as any)
+const AuthenticatedDealerOrdersPortalRoute =
+  AuthenticatedDealerOrdersPortalRouteImport.update({
+    id: '/dealer-orders/portal',
+    path: '/dealer-orders/portal',
+    getParentRoute: () => AuthenticatedRouteRoute,
+  } as any)
 const AuthenticatedInvoicesIndexRoute =
   AuthenticatedInvoicesIndexRouteImport.update({
     id: '/invoices/',
@@ -147,10 +175,14 @@ export interface FileRoutesByFullPath {
   '/notifications': typeof AuthenticatedNotificationsRoute
   '/pos': typeof AuthenticatedPosRoute
   '/settings': typeof AuthenticatedSettingsRoute
+  '/dealer-orders/$orderId': typeof AuthenticatedDealerOrdersOrderIdRoute
+  '/dealer-orders/new': typeof AuthenticatedDealerOrdersNewRoute
+  '/dealer-orders/portal': typeof AuthenticatedDealerOrdersPortalRoute
   '/invoices/$invoice': typeof AuthenticatedInvoicesInvoiceRoute
   '/invoices/new': typeof AuthenticatedInvoicesNewRoute
   '/products/new': typeof AuthenticatedProductsNewRoute
   '/sheet/$slug': typeof AuthenticatedSheetSlugRoute
+  '/dealer-orders/': typeof AuthenticatedDealerOrdersIndexRoute
   '/invoices/': typeof AuthenticatedInvoicesIndexRoute
 }
 export interface FileRoutesByTo {
@@ -167,10 +199,14 @@ export interface FileRoutesByTo {
   '/pos': typeof AuthenticatedPosRoute
   '/settings': typeof AuthenticatedSettingsRoute
   '/': typeof AuthenticatedIndexRoute
+  '/dealer-orders/$orderId': typeof AuthenticatedDealerOrdersOrderIdRoute
+  '/dealer-orders/new': typeof AuthenticatedDealerOrdersNewRoute
+  '/dealer-orders/portal': typeof AuthenticatedDealerOrdersPortalRoute
   '/invoices/$invoice': typeof AuthenticatedInvoicesInvoiceRoute
   '/invoices/new': typeof AuthenticatedInvoicesNewRoute
   '/products/new': typeof AuthenticatedProductsNewRoute
   '/sheet/$slug': typeof AuthenticatedSheetSlugRoute
+  '/dealer-orders': typeof AuthenticatedDealerOrdersIndexRoute
   '/invoices': typeof AuthenticatedInvoicesIndexRoute
 }
 export interface FileRoutesById {
@@ -189,10 +225,14 @@ export interface FileRoutesById {
   '/_authenticated/pos': typeof AuthenticatedPosRoute
   '/_authenticated/settings': typeof AuthenticatedSettingsRoute
   '/_authenticated/': typeof AuthenticatedIndexRoute
+  '/_authenticated/dealer-orders/$orderId': typeof AuthenticatedDealerOrdersOrderIdRoute
+  '/_authenticated/dealer-orders/new': typeof AuthenticatedDealerOrdersNewRoute
+  '/_authenticated/dealer-orders/portal': typeof AuthenticatedDealerOrdersPortalRoute
   '/_authenticated/invoices/$invoice': typeof AuthenticatedInvoicesInvoiceRoute
   '/_authenticated/invoices/new': typeof AuthenticatedInvoicesNewRoute
   '/_authenticated/products/new': typeof AuthenticatedProductsNewRoute
   '/_authenticated/sheet/$slug': typeof AuthenticatedSheetSlugRoute
+  '/_authenticated/dealer-orders/': typeof AuthenticatedDealerOrdersIndexRoute
   '/_authenticated/invoices/': typeof AuthenticatedInvoicesIndexRoute
 }
 export interface FileRouteTypes {
@@ -211,10 +251,14 @@ export interface FileRouteTypes {
     | '/notifications'
     | '/pos'
     | '/settings'
+    | '/dealer-orders/$orderId'
+    | '/dealer-orders/new'
+    | '/dealer-orders/portal'
     | '/invoices/$invoice'
     | '/invoices/new'
     | '/products/new'
     | '/sheet/$slug'
+    | '/dealer-orders/'
     | '/invoices/'
   fileRoutesByTo: FileRoutesByTo
   to:
@@ -231,10 +275,14 @@ export interface FileRouteTypes {
     | '/pos'
     | '/settings'
     | '/'
+    | '/dealer-orders/$orderId'
+    | '/dealer-orders/new'
+    | '/dealer-orders/portal'
     | '/invoices/$invoice'
     | '/invoices/new'
     | '/products/new'
     | '/sheet/$slug'
+    | '/dealer-orders'
     | '/invoices'
   id:
     | '__root__'
@@ -252,10 +300,14 @@ export interface FileRouteTypes {
     | '/_authenticated/pos'
     | '/_authenticated/settings'
     | '/_authenticated/'
+    | '/_authenticated/dealer-orders/$orderId'
+    | '/_authenticated/dealer-orders/new'
+    | '/_authenticated/dealer-orders/portal'
     | '/_authenticated/invoices/$invoice'
     | '/_authenticated/invoices/new'
     | '/_authenticated/products/new'
     | '/_authenticated/sheet/$slug'
+    | '/_authenticated/dealer-orders/'
     | '/_authenticated/invoices/'
   fileRoutesById: FileRoutesById
 }
@@ -365,6 +417,34 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AuthenticatedSettingsRouteImport
       parentRoute: typeof AuthenticatedRouteRoute
     }
+    '/_authenticated/dealer-orders/': {
+      id: '/_authenticated/dealer-orders/'
+      path: '/dealer-orders'
+      fullPath: '/dealer-orders/'
+      preLoaderRoute: typeof AuthenticatedDealerOrdersIndexRouteImport
+      parentRoute: typeof AuthenticatedRouteRoute
+    }
+    '/_authenticated/dealer-orders/$orderId': {
+      id: '/_authenticated/dealer-orders/$orderId'
+      path: '/dealer-orders/$orderId'
+      fullPath: '/dealer-orders/$orderId'
+      preLoaderRoute: typeof AuthenticatedDealerOrdersOrderIdRouteImport
+      parentRoute: typeof AuthenticatedRouteRoute
+    }
+    '/_authenticated/dealer-orders/new': {
+      id: '/_authenticated/dealer-orders/new'
+      path: '/dealer-orders/new'
+      fullPath: '/dealer-orders/new'
+      preLoaderRoute: typeof AuthenticatedDealerOrdersNewRouteImport
+      parentRoute: typeof AuthenticatedRouteRoute
+    }
+    '/_authenticated/dealer-orders/portal': {
+      id: '/_authenticated/dealer-orders/portal'
+      path: '/dealer-orders/portal'
+      fullPath: '/dealer-orders/portal'
+      preLoaderRoute: typeof AuthenticatedDealerOrdersPortalRouteImport
+      parentRoute: typeof AuthenticatedRouteRoute
+    }
     '/_authenticated/invoices/': {
       id: '/_authenticated/invoices/'
       path: '/invoices'
@@ -415,10 +495,14 @@ interface AuthenticatedRouteRouteChildren {
   AuthenticatedPosRoute: typeof AuthenticatedPosRoute
   AuthenticatedSettingsRoute: typeof AuthenticatedSettingsRoute
   AuthenticatedIndexRoute: typeof AuthenticatedIndexRoute
+  AuthenticatedDealerOrdersOrderIdRoute: typeof AuthenticatedDealerOrdersOrderIdRoute
+  AuthenticatedDealerOrdersNewRoute: typeof AuthenticatedDealerOrdersNewRoute
+  AuthenticatedDealerOrdersPortalRoute: typeof AuthenticatedDealerOrdersPortalRoute
   AuthenticatedInvoicesInvoiceRoute: typeof AuthenticatedInvoicesInvoiceRoute
   AuthenticatedInvoicesNewRoute: typeof AuthenticatedInvoicesNewRoute
   AuthenticatedProductsNewRoute: typeof AuthenticatedProductsNewRoute
   AuthenticatedSheetSlugRoute: typeof AuthenticatedSheetSlugRoute
+  AuthenticatedDealerOrdersIndexRoute: typeof AuthenticatedDealerOrdersIndexRoute
   AuthenticatedInvoicesIndexRoute: typeof AuthenticatedInvoicesIndexRoute
 }
 
@@ -434,10 +518,14 @@ const AuthenticatedRouteRouteChildren: AuthenticatedRouteRouteChildren = {
   AuthenticatedPosRoute: AuthenticatedPosRoute,
   AuthenticatedSettingsRoute: AuthenticatedSettingsRoute,
   AuthenticatedIndexRoute: AuthenticatedIndexRoute,
+  AuthenticatedDealerOrdersOrderIdRoute: AuthenticatedDealerOrdersOrderIdRoute,
+  AuthenticatedDealerOrdersNewRoute: AuthenticatedDealerOrdersNewRoute,
+  AuthenticatedDealerOrdersPortalRoute: AuthenticatedDealerOrdersPortalRoute,
   AuthenticatedInvoicesInvoiceRoute: AuthenticatedInvoicesInvoiceRoute,
   AuthenticatedInvoicesNewRoute: AuthenticatedInvoicesNewRoute,
   AuthenticatedProductsNewRoute: AuthenticatedProductsNewRoute,
   AuthenticatedSheetSlugRoute: AuthenticatedSheetSlugRoute,
+  AuthenticatedDealerOrdersIndexRoute: AuthenticatedDealerOrdersIndexRoute,
   AuthenticatedInvoicesIndexRoute: AuthenticatedInvoicesIndexRoute,
 }
 

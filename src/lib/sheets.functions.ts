@@ -19,7 +19,17 @@ import {
   type CustomerInput,
   type ReturnInput,
   type StockMovementInput,
+  type DealerInput,
+  type DealerOrderInput,
+  createDealer,
+  createDealerOrder,
+  updateDealerOrderStatus,
+  updateDealerOrderDetails,
+  getDealerOrderById,
+  getDealerOrders,
 } from "./sheets.server";
+
+export type { DealerOrderInput } from "./sheets.server";
 
 const requireAuth = createMiddleware().server(async ({ next }) => {
   assertAuthenticated();
@@ -238,3 +248,75 @@ export const logDownload = createServerFn({ method: "POST" })
     ]);
     return { ok: true };
   });
+
+export const addDealer = createServerFn({ method: "POST" })
+  .middleware([requireAuth])
+  .validator((data: DealerInput) => {
+    requiredText(data?.name, "Dealer name", 160);
+    return data;
+  })
+  .handler(async ({ data }) => createDealer(data));
+
+export const createDealerSalesOrder = createServerFn({ method: "POST" })
+  .middleware([requireAuth])
+  .validator((data: DealerOrderInput) => {
+    if (!data) throw new Error("Dealer order data is required.");
+    requiredText(data.dealerName, "Dealer name", 180);
+    requiredText(data.address, "Delivery address", 250);
+    requiredText(data.city, "City", 80);
+    requiredText(data.district, "District", 80);
+    requiredText(data.pinCode, "PIN code", 20);
+    requiredText(data.requiredDeliveryDate, "Required delivery date", 30);
+    if (!Array.isArray(data.items) || data.items.length === 0) {
+      throw new Error("At least one order item is required.");
+    }
+    data.items.forEach((item) => {
+      requiredText(item.productName, "Product name", 180);
+      boundedNumber(item.qty, "Quantity", 1, 20_000);
+      boundedNumber(item.unitPrice, "Unit price", 0, 2_000_000);
+    });
+    return data;
+  })
+  .handler(async ({ data }) => {
+    const { readSessionEmail, getUserRoleForEmail } = await import("./auth.server");
+    const email = readSessionEmail();
+    return createDealerOrder(data, { email, role: await getUserRoleForEmail(email) });
+  });
+
+export const updateDealerSalesOrderStatus = createServerFn({ method: "POST" })
+  .middleware([requireAuth])
+  .validator((data: { orderId: string; status: string; note?: string }) => {
+    requiredText(data?.orderId, "Order ID", 80);
+    requiredText(data?.status, "Status", 60);
+    return data;
+  })
+  .handler(async ({ data }) => {
+    const { readSessionEmail, getUserRoleForEmail } = await import("./auth.server");
+    const email = readSessionEmail();
+    return updateDealerOrderStatus(data.orderId, data.status, data.note, { email, role: await getUserRoleForEmail(email) });
+  });
+
+export const editDealerSalesOrder = createServerFn({ method: "POST" })
+  .middleware([requireAuth])
+  .validator((data: { orderId: string; details: import("./sheets.server").DealerOrderDetailsUpdate }) => {
+    requiredText(data?.orderId, "Order ID", 80);
+    if (!data.details) throw new Error("Updated order details are required.");
+    return data;
+  })
+  .handler(async ({ data }) => {
+    const { readSessionEmail, getUserRoleForEmail } = await import("./auth.server");
+    const email = readSessionEmail();
+    return updateDealerOrderDetails(data.orderId, data.details, { email, role: await getUserRoleForEmail(email) });
+  });
+
+export const getDealerOrdersList = createServerFn({ method: "GET" })
+  .middleware([requireAuth])
+  .handler(async () => getDealerOrders());
+
+export const getDealerOrderDetail = createServerFn({ method: "GET" })
+  .middleware([requireAuth])
+  .validator((data: { orderId: string }) => {
+    requiredText(data?.orderId, "Order ID", 80);
+    return data;
+  })
+  .handler(async ({ data }) => getDealerOrderById(data.orderId));
