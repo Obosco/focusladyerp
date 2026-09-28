@@ -1,14 +1,21 @@
-# Nothing here is needed to build or run the app on Vercel.
-.output
-.vercel
-.tanstack
-.wrangler
+node_modules
+.git
+out
+out/**
 release
-electron.cjs
-
-# Never upload credentials — these belong in Vercel environment variables.
-.env
-.env.*
-rational-iris-*.json
-service-account*.json
-*.json.key
+release/**
+latest-release
+latest-release/**
+desktop-release
+desktop-release/**
+focuslady-dist
+focuslady-dist/**
+win-unpacked
+win-unpacked/**
+dist-electron
+dist-electron/**
+*.exe
+*.msi
+*.7z
+*.zip
+*.blockmap
