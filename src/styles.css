@@ -463,7 +463,7 @@
     min-height: 210mm;
     margin: 0;
     padding: 8mm 8mm 7mm;
-    border: 0;
+    border: 1px solid #000;
     box-shadow: none;
     overflow: visible;
   }
