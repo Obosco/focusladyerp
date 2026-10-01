@@ -67,7 +67,7 @@ function DealerOrderingPage() {
   if (isLoading) return <ErpShell activeSlug="dealer-orders" title="Dealer Ordering"><div className="h-48 animate-pulse rounded-md bg-muted" /></ErpShell>;
   if (error) return <ErpShell activeSlug="dealer-orders" title="Dealer Ordering"><div role="alert" className="max-w-md rounded-md border border-border p-4"><p>Dealer and product masters could not be loaded.</p><Button className="mt-3" variant="outline" onClick={() => void refetch()}>Retry</Button></div></ErpShell>;
 
-  return <ErpShell activeSlug="dealer-orders" title="Dealer Ordering" subtitle="Create orders inside Focus Lady ERP using live catalog and stock data" actions={<Button variant="outline" asChild><Link to="/dealer-orders/"><ArrowLeft className="mr-2 h-4 w-4" />All orders</Link></Button>}>
+  return <ErpShell activeSlug="dealer-orders" title="Dealer Ordering" subtitle="Create orders inside Focus Lady ERP using live catalog and stock data" actions={<Button variant="outline" asChild><Link to="/dealer-orders"><ArrowLeft className="mr-2 h-4 w-4" />All orders</Link></Button>}>
     <div className="space-y-6">
       <section className="max-w-2xl space-y-3 border-b border-border pb-5">
         <div className="flex items-start gap-3"><Store className="mt-1 h-5 w-5 shrink-0 text-muted-foreground" /><div><h2 className="font-semibold">Choose a dealer</h2><p className="mt-1 text-sm text-muted-foreground">Orders are created and managed directly in the ERP.</p></div></div>

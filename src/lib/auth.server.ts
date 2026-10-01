@@ -1,6 +1,6 @@
-import { createHmac, timingSafeEqual } from "node:crypto";
+import { createHmac, randomBytes, scryptSync, timingSafeEqual } from "node:crypto";
 import { deleteCookie, getCookie, setCookie } from "@tanstack/react-start/server";
-import { appendRows, ensureSheet, readRange } from "./sheets.server";
+import { appendRows, ensureSheet, readRange, updateRange } from "./sheets.server";
 
 const COOKIE_NAME = "flb_session";
 const SESSION_TTL_SECONDS = 12 * 60 * 60;
@@ -31,6 +31,7 @@ const USER_HEADERS = [
   "Locked Until",
   "Email Verified",
   "Updated At",
+  "Password Hash",
 ];
 
 type MemberAccount = {
@@ -61,6 +62,7 @@ type UserRecord = {
   lockedUntil: string;
   emailVerified: string;
   updatedAt: string;
+  passwordHash: string;
 };
 
 function firstEnv(...keys: string[]) {
@@ -111,11 +113,38 @@ export function getAdminEmails() {
 }
 
 function getAdminPassword() {
-  return firstEnv("ERP_ADMIN_PASSWORD", "ADMIN_PASSWORD", "AUTH_PASSWORD") || DEFAULT_ADMIN_PASSWORD;
+  return (
+    firstEnv("ERP_ADMIN_PASSWORD", "ADMIN_PASSWORD", "AUTH_PASSWORD") ||
+    (process.env.NODE_ENV === "production" ? "" : DEFAULT_ADMIN_PASSWORD)
+  );
 }
 
 function getSessionSecret() {
-  return firstEnv("SESSION_SECRET", "AUTH_SECRET") || DEFAULT_SESSION_SECRET;
+  return (
+    firstEnv("SESSION_SECRET", "AUTH_SECRET") ||
+    (process.env.NODE_ENV === "production" ? "" : DEFAULT_SESSION_SECRET)
+  );
+}
+
+function hashPassword(password: string) {
+  const salt = randomBytes(16);
+  const hash = scryptSync(password, salt, 64);
+  return `scrypt$${salt.toString("base64url")}$${hash.toString("base64url")}`;
+}
+
+function verifyPassword(password: string, encodedHash: string) {
+  const [algorithm, saltValue, hashValue] = encodedHash.split("$");
+  if (algorithm !== "scrypt" || !saltValue || !hashValue) return false;
+
+  try {
+    const salt = Buffer.from(saltValue, "base64url");
+    const expectedHash = Buffer.from(hashValue, "base64url");
+    if (salt.length !== 16 || expectedHash.length !== 64) return false;
+    const actualHash = scryptSync(password, salt, expectedHash.length);
+    return actualHash.length === expectedHash.length && timingSafeEqual(actualHash, expectedHash);
+  } catch {
+    return false;
+  }
 }
 
 function getConfiguredMemberAccounts(): MemberAccount[] {
@@ -139,6 +168,12 @@ function getConfiguredMemberAccounts(): MemberAccount[] {
 
 async function ensureUsersSheetReady() {
   await ensureSheet(USERS_SHEET_TITLE, USER_HEADERS);
+  const [passwordHashHeader] = await readRange("Users!T1:T1");
+  const existingHeader = passwordHashHeader?.[0]?.trim();
+  if (existingHeader && existingHeader !== "Password Hash") {
+    throw new Error("The Users sheet column T is already in use; password storage was not changed.");
+  }
+  if (!existingHeader) await updateRange("Users!T1", [["Password Hash"]]);
 }
 
 function parseUserRow(row: string[]): UserRecord | null {
@@ -166,6 +201,7 @@ function parseUserRow(row: string[]): UserRecord | null {
     lockedUntil: String(row[16] ?? ""),
     emailVerified: String(row[17] ?? "false"),
     updatedAt: String(row[18] ?? ""),
+    passwordHash: String(row[19] ?? ""),
   };
 }
 
@@ -181,6 +217,15 @@ async function getUserByEmail(email: string): Promise<UserRecord | null> {
   const normalizedEmail = normalizeEmail(email);
   const users = await getUsersSheetRecords();
   return users.find((user) => user.email === normalizedEmail) ?? null;
+}
+
+async function getUserSheetRow(email: string) {
+  await ensureUsersSheetReady();
+  const normalizedEmail = normalizeEmail(email);
+  const rows = await readRange(USERS_SHEET_RANGE);
+  const rowIndex = rows.findIndex((row) => normalizeEmail(row[2] ?? "") === normalizedEmail);
+  if (rowIndex < 0) return null;
+  return { row: rows[rowIndex], rowNumber: rowIndex + 2 };
 }
 
 function sign(payload: string) {
@@ -223,20 +268,24 @@ export function assertAdmin() {
 }
 
 export async function verifyCredentials(email: string, password: string) {
+  if (!isAuthConfigured()) {
+    throw new Error("Authentication is not configured on the server.");
+  }
   const normalizedEmail = normalizeEmail(email);
   if (!normalizedEmail || !password) throw new Error("Invalid email or password.");
 
   const adminEmails = getAdminEmails();
   const envAccounts = getConfiguredMemberAccounts();
 
-  if (adminEmails.includes(normalizedEmail) && password === getAdminPassword()) {
+  const adminPassword = getAdminPassword();
+  if (adminEmails.includes(normalizedEmail) && adminPassword && safeEqual(password, adminPassword)) {
     return normalizedEmail;
   }
 
   const configuredAccount = envAccounts.find(
     (account) => normalizeEmail(account.email) === normalizedEmail,
   );
-  if (configuredAccount && configuredAccount.password && password === configuredAccount.password) {
+  if (configuredAccount && configuredAccount.password && safeEqual(password, configuredAccount.password)) {
     return normalizedEmail;
   }
 
@@ -247,7 +296,7 @@ export async function verifyCredentials(email: string, password: string) {
     throw new Error("This account is pending, disabled, or suspended. Contact your administrator.");
   }
 
-  if (getAdminEmails().includes(normalizedEmail)) {
+  if (user.passwordHash && verifyPassword(password, user.passwordHash)) {
     return normalizedEmail;
   }
 
@@ -280,14 +329,14 @@ export async function createMemberAccount(email: string, password: string) {
   if (!adminEmail || !isAdminEmail(adminEmail)) {
     throw new Error("Only the administrator can create member accounts.");
   }
-  return saveMemberAccount(email, password);
+  return saveMemberAccount(email, password, "ACTIVE");
 }
 
 export async function registerMemberAccount(email: string, password: string) {
   return saveMemberAccount(email, password);
 }
 
-async function saveMemberAccount(email: string, password: string) {
+async function saveMemberAccount(email: string, password: string, status = "PENDING") {
   const normalizedEmail = normalizeEmail(email);
   if (!normalizedEmail || !normalizedEmail.includes("@")) {
     throw new Error("Enter a valid member email.");
@@ -302,19 +351,19 @@ async function saveMemberAccount(email: string, password: string) {
   const createdAt = new Date().toISOString();
   const userId = `USR-${Date.now().toString(36).toUpperCase()}-${Math.random().toString(36).slice(2, 6).toUpperCase()}`;
 
-  await appendRows("Users!A:U", [[
+  await appendRows("Users!A:T", [[
     userId,
     "",
     normalizedEmail,
     "",
     "Staff",
-    "PENDING",
+    status,
     "",
     "",
     "",
     createdAt,
     readSessionEmail() || "self-registration",
-    "",
+    status === "ACTIVE" ? createdAt : "",
     "",
     "",
     "",
@@ -322,6 +371,7 @@ async function saveMemberAccount(email: string, password: string) {
     "",
     "false",
     createdAt,
+    hashPassword(password),
   ]]);
 
   return { email: normalizedEmail };
@@ -335,8 +385,13 @@ export async function resetMemberPassword(email: string, password: string) {
   if (password.length < 8) throw new Error("Passwords must be at least 8 characters.");
 
   const normalizedEmail = normalizeEmail(email);
-  const user = await getUserByEmail(normalizedEmail);
-  if (!user) throw new Error("Member account not found.");
+  const userRow = await getUserSheetRow(normalizedEmail);
+  if (!userRow) throw new Error("Member account not found.");
+
+  const changedAt = new Date().toISOString();
+  await updateRange(`Users!N${userRow.rowNumber}`, [[changedAt]]);
+  await updateRange(`Users!S${userRow.rowNumber}`, [[changedAt]]);
+  await updateRange(`Users!T${userRow.rowNumber}`, [[hashPassword(password)]]);
 
   return { email: normalizedEmail };
 }

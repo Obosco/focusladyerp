@@ -115,7 +115,7 @@ const DEFAULT_SHEET_HEADERS: Record<string, string[]> = {
   "Dealer Order Items": ["Order ID", "Product ID", "Product", "SKU", "Barcode", "Size", "Cup Size", "Color", "Quantity", "Available Stock", "Unit Price", "Discount", "Line Total"],
   Returns: ["Return ID", "Date", "Invoice", "Customer", "Product", "Size", "Color", "Qty", "Amount", "Type", "Reason"],
   "Audit History": ["Audit ID", "Timestamp", "User ID", "User Name", "Action", "Module", "Record ID", "Product ID", "Variant ID", "Barcode", "Old Value", "New Value", "Description", "Device", "Status"],
-  Users: ["User ID", "Full Name", "Email", "Mobile Number", "Role", "Status", "Department", "Employee ID", "Profile Image URL", "Created At", "Created By", "Activated At", "Last Login At", "Last Password Change At", "Session Revoked At", "Failed Login Attempts", "Locked Until", "Email Verified", "Updated At"],
+  Users: ["User ID", "Full Name", "Email", "Mobile Number", "Role", "Status", "Department", "Employee ID", "Profile Image URL", "Created At", "Created By", "Activated At", "Last Login At", "Last Password Change At", "Session Revoked At", "Failed Login Attempts", "Locked Until", "Email Verified", "Updated At", "Password Hash"],
 };
 
 function columnLabel(index: number) {

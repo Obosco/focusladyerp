@@ -165,15 +165,17 @@ function BarcodeScannerPage() {
     try {
       setBusy(true);
       await updateStockLevel({
-        barcode: match.barcode,
-        product: match.product,
-        variant: match.variant,
-        sku: match.sku,
-        warehouse,
-        movementType,
-        quantity,
-        reason,
-        notes,
+        data: {
+          barcode: match.barcode,
+          product: match.product,
+          variant: match.variant,
+          sku: match.sku,
+          warehouse,
+          movementType,
+          quantity,
+          reason,
+          notes,
+        },
       });
       toast.success(`Stock ${movementType.toLowerCase()} updated for ${match.product}`);
       setMessage(`${movementType} recorded for ${match.product}.`);

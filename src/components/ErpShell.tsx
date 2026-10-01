@@ -13,6 +13,7 @@ import {
   Receipt,
   RefreshCcw,
   Settings,
+  Store,
 } from "lucide-react";
 import { signOutClean } from "@/lib/session";
 import { useQuery, useQueryClient } from "@tanstack/react-query";

@@ -302,19 +302,19 @@ function AnalyticsContent() {
         });
 
     const stockValue = inventoryRows.reduce((sum, entry) => {
-      const qty = toNum(entry.row[stockQtyIndex] >= 0 ? entry.row[stockQtyIndex] : productQtyFallback(entry.row));
-      const price = toNum(entry.row[stockSellIndex] >= 0 ? entry.row[stockSellIndex] : entry.row[productPriceIndex] ?? 0);
+      const qty = toNum(stockQtyIndex >= 0 ? entry.row[stockQtyIndex] : productQtyFallback(entry.row));
+      const price = toNum(stockSellIndex >= 0 ? entry.row[stockSellIndex] : entry.row[productPriceIndex] ?? 0);
       return sum + qty * price;
     }, 0);
 
     const lowStockItems = inventoryRows.filter((entry) => {
-      const qty = toNum(entry.row[stockQtyIndex] >= 0 ? entry.row[stockQtyIndex] : productQtyFallback(entry.row));
-      const min = toNum(entry.row[stockMinIndex] >= 0 ? entry.row[stockMinIndex] : 0);
+      const qty = toNum(stockQtyIndex >= 0 ? entry.row[stockQtyIndex] : productQtyFallback(entry.row));
+      const min = toNum(stockMinIndex >= 0 ? entry.row[stockMinIndex] : 0);
       return qty > 0 && qty <= min;
     }).length;
 
     const outOfStockItems = inventoryRows.filter((entry) => {
-      const qty = toNum(entry.row[stockQtyIndex] >= 0 ? entry.row[stockQtyIndex] : productQtyFallback(entry.row));
+      const qty = toNum(stockQtyIndex >= 0 ? entry.row[stockQtyIndex] : productQtyFallback(entry.row));
       return qty <= 0;
     }).length;
 
@@ -327,14 +327,15 @@ function AnalyticsContent() {
       grouping,
     );
 
-    const flow = series(
+    const flowPoints = series(
       [
         ...collection.map((entry) => ({ date: String(entry.date ?? ""), values: { In: toNum(entry.row[collectionAmountIndex]) } })),
         ...purchasesRows.map((entry) => ({ date: String(entry.date ?? ""), values: { Out: toNum(entry.row[purchaseTotalIndex]) } })),
         ...expenses.map((entry) => ({ date: String(entry.date ?? ""), values: { Out: toNum(entry.row[expenseTotalIndex]) } })),
       ].filter((point) => point.date),
       grouping,
-    ).map((point) => ({
+    ) as Array<{ period: string; In?: number; Out?: number }>;
+    const flow = flowPoints.map((point) => ({
       period: point.period,
       In: point.In ?? 0,
       Out: point.Out ?? 0,
@@ -726,7 +727,7 @@ function AnalyticsContent() {
               <span className="text-sm text-muted-foreground">Out of stock</span>
               <strong>{currentRange.outOfStockItems}</strong>
             </div>
-            <Link to="/sheet/stock" className="inline-flex items-center text-sm text-primary underline underline-offset-4">Open stock module</Link>
+            <Link to="/sheet/$slug" params={{ slug: "stock" }} className="inline-flex items-center text-sm text-primary underline underline-offset-4">Open stock module</Link>
           </CardContent>
         </Card>
 
@@ -961,7 +962,7 @@ function getProductCost(products: { row: string[] }[], productName: string, cost
     return String(productCell ?? "").trim().toLowerCase() === productName.toLowerCase();
   });
   if (!item) return 0;
-  return toNum(item.row[costIndex] >= 0 ? item.row[costIndex] : item.row[priceIndex]);
+  return toNum(item.row[costIndex >= 0 ? costIndex : priceIndex]);
 }
 
 function productQtyFallback(row: string[]) {

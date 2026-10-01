@@ -89,7 +89,9 @@ export function getNotifications(): NotificationItem[] {
   return getStoredNotifications().sort((a, b) => b.time - a.time);
 }
 
-export function addNotification(item: Omit<NotificationItem, "time" | "read"> & { time?: number }) {
+export function addNotification(
+  item: Omit<NotificationItem, "time" | "read"> & { time?: number; read?: boolean },
+) {
   const notifications = getNotifications();
   const next = [
     {

@@ -1,5 +1,7 @@
 import { createServerFn } from "@tanstack/react-start";
 import {
+  assertAdmin,
+  assertAuthenticated,
   clearSession,
   createMemberAccount,
   createSession,
@@ -45,13 +47,15 @@ export const signOut = createServerFn({ method: "POST" }).handler(async () => {
 });
 
 export const getMemberAccounts = createServerFn({ method: "GET" }).handler(async () => {
+  assertAdmin();
   return { accounts: await listMemberAccounts() };
 });
 
 export const getCurrentUserRole = createServerFn({ method: "GET" }).handler(async () => {
+  assertAuthenticated();
   const email = readSessionEmail();
   if (!email) return { role: "Sales" };
-  return { role: getUserRoleForEmail(email) };
+  return { role: await getUserRoleForEmail(email) };
 });
 
 export const addMemberAccount = createServerFn({ method: "POST" })
