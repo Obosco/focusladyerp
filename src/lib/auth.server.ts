@@ -260,9 +260,9 @@ export function assertAuthenticated() {
   if (!readSessionEmail()) throw new Error("Please sign in to continue.");
 }
 
-export function assertAdmin() {
+export async function assertAdmin() {
   assertAuthenticated();
-  if (!isAdminEmail(readSessionEmail())) {
+  if (!(await isAdminEmail(readSessionEmail()))) {
     throw new Error("Admin access required.");
   }
 }
@@ -303,13 +303,20 @@ export async function verifyCredentials(email: string, password: string) {
   throw new Error("Invalid email or password.");
 }
 
-export function isAdminEmail(email: string) {
+export async function isAdminEmail(email: string) {
   const normalizedEmail = normalizeEmail(email);
-  return getAdminEmails().includes(normalizedEmail) || normalizedEmail === "admin";
+  if (getAdminEmails().includes(normalizedEmail) || normalizedEmail === "admin") return true;
+
+  const user = await getUserByEmail(normalizedEmail);
+  return Boolean(
+    user &&
+      normalizeStatus(user.status) === "ACTIVE" &&
+      normalizeStatus(user.role) === "ADMIN",
+  );
 }
 
 export async function getUserRoleForEmail(email: string) {
-  if (isAdminEmail(email)) return "Admin";
+  if (await isAdminEmail(email)) return "Admin";
   const user = await getUserByEmail(email);
   return user?.role || "Sales";
 }
@@ -325,10 +332,7 @@ export async function listMemberAccounts() {
 }
 
 export async function createMemberAccount(email: string, password: string) {
-  const adminEmail = readSessionEmail();
-  if (!adminEmail || !isAdminEmail(adminEmail)) {
-    throw new Error("Only the administrator can create member accounts.");
-  }
+  await assertAdmin();
   return saveMemberAccount(email, password, "ACTIVE");
 }
 
@@ -378,10 +382,7 @@ async function saveMemberAccount(email: string, password: string, status = "PEND
 }
 
 export async function resetMemberPassword(email: string, password: string) {
-  const adminEmail = readSessionEmail();
-  if (!adminEmail || !isAdminEmail(adminEmail)) {
-    throw new Error("Only an administrator can reset member passwords.");
-  }
+  await assertAdmin();
   if (password.length < 8) throw new Error("Passwords must be at least 8 characters.");
 
   const normalizedEmail = normalizeEmail(email);

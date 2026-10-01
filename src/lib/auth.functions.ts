@@ -22,7 +22,7 @@ export const getAuthSession = createServerFn({ method: "GET" }).handler(async ()
     required,
     email: email || null,
     signedIn: Boolean(email) && isAuthConfigured(),
-    isAdmin: Boolean(email) && isAdminEmail(email),
+    isAdmin: email ? await isAdminEmail(email) : false,
   };
 });
 
@@ -47,7 +47,7 @@ export const signOut = createServerFn({ method: "POST" }).handler(async () => {
 });
 
 export const getMemberAccounts = createServerFn({ method: "GET" }).handler(async () => {
-  assertAdmin();
+  await assertAdmin();
   return { accounts: await listMemberAccounts() };
 });
 

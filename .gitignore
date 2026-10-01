@@ -62,3 +62,5 @@ out/
 release/
 dist/
 node_modules/
+
+.env.local

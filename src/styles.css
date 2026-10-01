@@ -1,6 +1,7 @@
 @import "tailwindcss" source(none);
 @source "../src";
 @import "tw-animate-css";
+@import "./components/invoice/invoice.print.css";
 
 @custom-variant dark (&:is(.dark *));
 
@@ -432,39 +433,5 @@
 
   .invoice-totals-box {
     width: 100%;
-  }
-}
-
-@media print {
-  @page {
-    size: A4 landscape;
-    margin: 0;
-  }
-
-  html,
-  body {
-    margin: 0;
-    padding: 0;
-    background: #fff !important;
-  }
-
-  body * {
-    visibility: hidden;
-  }
-
-  #invoice-preview,
-  #invoice-preview * {
-    visibility: visible;
-  }
-
-  #invoice-preview {
-    position: static;
-    width: 297mm;
-    min-height: 210mm;
-    margin: 0;
-    padding: 8mm 8mm 7mm;
-    border: 1px solid #000;
-    box-shadow: none;
-    overflow: visible;
   }
 }

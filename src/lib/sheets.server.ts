@@ -6,6 +6,10 @@ import { invoiceTotals } from "./invoice";
 
 export type SheetValues = string[][];
 
+function normalizeSheetValues(values: unknown[][] | undefined): SheetValues {
+  return (values ?? []).map((row) => row.map((value) => String(value ?? "")));
+}
+
 function firstEnv(...keys: string[]) {
   for (const key of keys) {
     const value = process.env[key];
@@ -249,19 +253,19 @@ async function readSheetValues(range: string): Promise<SheetValues> {
   assertAllowedRange(range);
   const title = sheetTitleFromRange(range);
   try {
-    const data = await sheetsRequest<{ values?: SheetValues }>(
+    const data = await sheetsRequest<{ values?: unknown[][] }>(
       `/values/${encodeURIComponent(range)}?valueRenderOption=UNFORMATTED_VALUE&dateTimeRenderOption=SERIAL_NUMBER`,
     );
-    return data.values ?? [];
+    return normalizeSheetValues(data.values);
   } catch (error) {
     if (!(error instanceof SheetsRequestError) || (error.status !== 400 && error.status !== 404)) {
       throw error;
     }
     await ensureSheet(title, DEFAULT_SHEET_HEADERS[title] ?? []);
-    const data = await sheetsRequest<{ values?: SheetValues }>(
+    const data = await sheetsRequest<{ values?: unknown[][] }>(
       `/values/${encodeURIComponent(range)}?valueRenderOption=UNFORMATTED_VALUE&dateTimeRenderOption=SERIAL_NUMBER`,
     );
-    return data.values ?? [];
+    return normalizeSheetValues(data.values);
   }
 }
 
@@ -279,13 +283,13 @@ export async function readRanges(ranges: string[]) {
   const params = new URLSearchParams();
   ranges.forEach((range) => params.append("ranges", range));
   try {
-    const data = await sheetsRequest<{ valueRanges?: { range?: string; values?: SheetValues }[] }>(
+    const data = await sheetsRequest<{ valueRanges?: { range?: string; values?: unknown[][] }[] }>(
       `/values:batchGet?${params.toString()}&valueRenderOption=UNFORMATTED_VALUE&dateTimeRenderOption=SERIAL_NUMBER`,
     );
 
     return (data.valueRanges ?? []).map((valueRange) => ({
       range: valueRange.range ?? "",
-      values: valueRange.values ?? [],
+      values: normalizeSheetValues(valueRange.values),
     }));
   } catch (error) {
     // Google rejects the entire batch when one optional worksheet is missing.

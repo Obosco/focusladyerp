@@ -3,6 +3,7 @@ import { useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { Eye, EyeOff } from "lucide-react";
 import { toast } from "sonner";
 import { createAccount, signIn } from "@/lib/auth.functions";
 import { setRememberMe } from "@/lib/session";
@@ -22,6 +23,7 @@ function AuthPage() {
   const [mode, setMode] = useState<AuthMode>("login");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
+  const [showPassword, setShowPassword] = useState(false);
   const [remember, setRemember] = useState(true);
   const [busy, setBusy] = useState(false);
 
@@ -32,7 +34,7 @@ function AuthPage() {
       if (mode === "signup") {
         await createAccount({ data: { email, password } });
         setMode("login");
-        toast.success("Account created. Sign in to continue.");
+        toast.success("Account created. Ask an administrator to activate it before signing in.");
         return;
       }
       await signIn({ data: { email, password, remember } });
@@ -71,7 +73,7 @@ function AuthPage() {
               <Label htmlFor="email">Email</Label>
               <Input
                 id="email"
-                type="text"
+                type="email"
                 autoComplete="username"
                 value={email}
                 onChange={(event) => setEmail(event.target.value)}
@@ -80,15 +82,28 @@ function AuthPage() {
             </div>
             <div>
               <Label htmlFor="password">Password</Label>
-              <Input
-                id="password"
-                type="password"
-                autoComplete="current-password"
-                minLength={mode === "signup" ? 8 : undefined}
-                value={password}
-                onChange={(event) => setPassword(event.target.value)}
-                required
-              />
+              <div className="relative">
+                <Input
+                  id="password"
+                  type={showPassword ? "text" : "password"}
+                  autoComplete={mode === "signup" ? "new-password" : "current-password"}
+                  minLength={mode === "signup" ? 8 : undefined}
+                  value={password}
+                  onChange={(event) => setPassword(event.target.value)}
+                  className="pr-11"
+                  required
+                />
+                <button
+                  type="button"
+                  aria-label={showPassword ? "Hide password" : "Show password"}
+                  aria-pressed={showPassword}
+                  title={showPassword ? "Hide password" : "Show password"}
+                  onClick={() => setShowPassword((visible) => !visible)}
+                  className="absolute inset-y-0 right-0 flex w-10 items-center justify-center text-black/60 hover:text-black focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-black"
+                >
+                  {showPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                </button>
+              </div>
             </div>
             <label className="flex items-center gap-2 text-sm">
               <input

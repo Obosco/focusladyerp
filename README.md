@@ -1666,3 +1666,20 @@ sips --padToHeightWidth 180 180 --padColor FFFFFF /tmp/apple.png --out public/ap
 
 Bump `VERSION` in `public/sw.js` if the caching strategy itself changes; hashed asset
 names already handle ordinary content updates.
+
+## Printable GST Invoice
+
+Render an invoice JSON object with the presentational A4 template:
+
+```tsx
+import { InvoiceTemplate } from "@/components/invoice/InvoiceTemplate";
+import type { Invoice } from "@/components/invoice/invoice.types";
+
+function InvoiceView({ json }: { json: Invoice }) {
+  return <InvoiceTemplate invoice={json} />;
+}
+```
+
+Use `InvoicePreviewPage` when Print, Download PDF (browser print dialog), and WhatsApp
+sharing controls are needed. The authenticated invoice route maps existing sheet rows
+into this shape.
