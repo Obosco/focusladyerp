@@ -22,7 +22,7 @@ const invoiceQuery = (invoice: string) =>
           ],
         },
       }),
-    staleTime: 15_000,
+    staleTime: 30_000,
   });
 
 export const Route = createFileRoute("/_authenticated/invoices/$invoice")({

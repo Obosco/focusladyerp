@@ -1,4 +1,5 @@
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
+import { useQueryClient } from "@tanstack/react-query";
 import { useState } from "react";
 import { ErpShell } from "@/components/ErpShell";
 import { Button } from "@/components/ui/button";
@@ -15,6 +16,7 @@ export const Route = createFileRoute("/_authenticated/products/new")({
 
 function ProductNewPage() {
   const navigate = useNavigate();
+  const queryClient = useQueryClient();
   const [name, setName] = useState("");
   const [category, setCategory] = useState("");
   const [brand, setBrand] = useState("");
@@ -58,6 +60,7 @@ function ProductNewPage() {
           variants: variants.filter((variant) => variant.variantName || variant.sku || variant.barcode || variant.size || variant.color),
         },
       });
+      await queryClient.invalidateQueries({ queryKey: ["erp"] });
       toast.success("Product saved with barcode validation");
       navigate({ to: "/sheet/$slug", params: { slug: "products" } });
     } catch (error) {

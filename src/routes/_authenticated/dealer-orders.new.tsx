@@ -7,13 +7,13 @@ import { ErpShell } from "@/components/ErpShell";
 import { Button } from "@/components/ui/button";
 import { addDealer, createDealerSalesOrder } from "@/lib/sheets.functions";
 import { getCurrentUserRole } from "@/lib/auth.functions";
-import { getSheetsBatch, getErpSettings } from "@/lib/sheets.functions";
+import { getSheetsBatch } from "@/lib/sheets.functions";
 import { ArrowLeft } from "lucide-react";
 import { toast } from "sonner";
 
 const masterQuery = {
   queryKey: ["erp", "dealer-order-masters"],
-  queryFn: () => getSheetsBatch({ data: { ranges: ["Customers!A2:T5000", "Products!A2:Q2000", "'Product Variants'!A2:Q2000"] } }),
+  queryFn: () => getSheetsBatch({ data: { ranges: ["Customers!A2:T5000", "Products!A2:Q2000", "'Product Variants'!A2:Q2000", "Settings!A2:B50"] } }),
   staleTime: 30_000,
 };
 const num = (value: unknown) => { const parsed = Number(String(value ?? "").replace(/[^\d.-]/g, "")); return Number.isFinite(parsed) ? parsed : 0; };
@@ -28,13 +28,14 @@ function NewDealerOrderPage() {
   const client = useQueryClient();
   const [busy, setBusy] = useState(false);
   const { data, isLoading, error, refetch } = useQuery(masterQuery);
-  const { data: settings } = useQuery({ queryKey: ["erp", "settings"], queryFn: () => getErpSettings(), staleTime: 30_000 });
   const { data: roleData } = useQuery({ queryKey: ["erp", "current-user-role"], queryFn: () => getCurrentUserRole(), staleTime: 60_000 });
   const save = useServerFn(createDealerSalesOrder);
   const saveDealer = useServerFn(addDealer);
   const customerRows = data?.valueRanges?.[0]?.values ?? [];
   const productRows = data?.valueRanges?.[1]?.values ?? [];
   const variantRows = data?.valueRanges?.[2]?.values ?? [];
+  const settingsRows = data?.valueRanges?.[3]?.values ?? [];
+  const settings = new Map(settingsRows.map((row) => [row[0] ?? "", row[1] ?? ""]));
   const dealers: DealerOption[] = useMemo(() => customerRows.filter((row) => row[1] && ["wholesale", "bulk"].includes(String(row[7] ?? "").toLowerCase())).map((row) => ({ id: String(row[0] ?? ""), name: String(row[1] ?? ""), phone: String(row[2] ?? ""), address: String(row[3] ?? ""), city: String(row[4] ?? ""), district: String(row[5] ?? ""), pinCode: "" })), [customerRows]);
   const catalog: DealerCatalogItem[] = useMemo(() => {
     const products = productRows.filter((row) => row[1]);
@@ -71,6 +72,6 @@ function NewDealerOrderPage() {
 
   return <ErpShell activeSlug="dealer-orders" title="New Dealer Order" subtitle="Fast entry · live product, price and stock data" actions={<Button variant="outline" onClick={() => void navigate({ to: "/dealer-orders" })}><ArrowLeft className="mr-2 h-4 w-4" />Orders</Button>}>
     {!dealers.length ? <div className="mb-4 rounded-md border border-amber-500/30 bg-amber-500/5 p-3 text-sm">No wholesale or bulk dealers found. Add a dealer below to continue.</div> : null}
-    <DealerOrderComposer dealers={dealers} catalog={catalog} defaultDelivery={undefined} taxPercent={Number(settings?.defaultGstPercent ?? 0)} canBackorder={canBackorder} onAddDealer={createNewDealer} onSubmit={createOrder} submitting={busy} />
+    <DealerOrderComposer dealers={dealers} catalog={catalog} defaultDelivery={undefined} taxPercent={Number(settings.get("default_gst_percent") ?? 0) || 0} canBackorder={canBackorder} onAddDealer={createNewDealer} onSubmit={createOrder} submitting={busy} />
   </ErpShell>;
 }

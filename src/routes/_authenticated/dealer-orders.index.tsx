@@ -27,7 +27,7 @@ function DealerOrdersPage() {
   const { data = [], isLoading, error, refetch } = useQuery({
     queryKey: ["erp", "dealer-orders"],
     queryFn: () => getDealerOrdersList(),
-    staleTime: 15_000,
+    staleTime: 30_000,
   });
   const dealers = useMemo(() => [...new Set(data.map((order) => order.dealerName).filter(Boolean))].sort(), [data]);
   const filtered = useMemo(() => data

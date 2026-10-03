@@ -71,6 +71,10 @@ export const askAssistant = createServerFn({ method: "POST" })
   })
   .handler(async ({ data }) => {
     assertAuthenticated();
-    const valueRanges = await readRanges(ranges);
+    const values = await readRanges(ranges);
+    const valueRanges = values.map((rangeValues, index) => ({
+      range: ranges[index] ?? "",
+      values: rangeValues,
+    }));
     return { answer: answerQuestion(data.question.trim(), valueRanges) };
   });

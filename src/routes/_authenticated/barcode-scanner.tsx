@@ -1,13 +1,13 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { useMemo, useRef, useState } from "react";
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { ErpShell } from "@/components/ErpShell";
 import { BarcodeLookup, BarcodeScanner } from "@/components/BarcodeScanner";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { getSheetRange, updateStockLevel } from "@/lib/sheets.functions";
+import { getSheetsBatch, updateStockLevel } from "@/lib/sheets.functions";
 import { toast } from "sonner";
 
 type BarcodeMatch = {
@@ -99,25 +99,30 @@ function parseBarcodeMatches(
 }
 
 function BarcodeScannerPage() {
-  const { data: barcodeData, isLoading: loadingBarcode } = useQuery({
-    queryKey: ["erp", "barcode-database"],
-    queryFn: () => getSheetRange({ data: { range: "'Barcode Database'!A2:Q2000" } }),
-    staleTime: 30_000,
-  });
-  const { data: productsData } = useQuery({
-    queryKey: ["erp", "products-sheet"],
-    queryFn: () => getSheetRange({ data: { range: "Products!A2:Q2000" } }),
-    staleTime: 30_000,
-  });
-  const { data: variantsData } = useQuery({
-    queryKey: ["erp", "variants-sheet"],
-    queryFn: () => getSheetRange({ data: { range: "'Product Variants'!A2:Q2000" } }),
+  const queryClient = useQueryClient();
+  const { data: catalogData, isLoading: loadingBarcode } = useQuery({
+    queryKey: ["erp", "barcode-scan-masters"],
+    queryFn: () =>
+      getSheetsBatch({
+        data: {
+          ranges: [
+            "'Barcode Database'!A2:Q2000",
+            "Products!A2:Q2000",
+            "'Product Variants'!A2:Q2000",
+          ],
+        },
+      }),
     staleTime: 30_000,
   });
 
   const rows = useMemo(
-    () => parseBarcodeMatches(barcodeData?.values ?? [], productsData?.values ?? [], variantsData?.values ?? []),
-    [barcodeData, productsData, variantsData],
+    () =>
+      parseBarcodeMatches(
+        catalogData?.valueRanges?.[0]?.values ?? [],
+        catalogData?.valueRanges?.[1]?.values ?? [],
+        catalogData?.valueRanges?.[2]?.values ?? [],
+      ),
+    [catalogData],
   );
   const [barcode, setBarcode] = useState("");
   const [message, setMessage] = useState("Point camera at a barcode or type the code manually.");
@@ -177,6 +182,7 @@ function BarcodeScannerPage() {
           notes,
         },
       });
+      await queryClient.invalidateQueries({ queryKey: ["erp"] });
       toast.success(`Stock ${movementType.toLowerCase()} updated for ${match.product}`);
       setMessage(`${movementType} recorded for ${match.product}.`);
     } catch (error) {

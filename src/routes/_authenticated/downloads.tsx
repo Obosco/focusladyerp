@@ -10,7 +10,7 @@ import { RefreshCcw } from "lucide-react";
 const historyQuery = queryOptions({
   queryKey: ["erp", "download-history"],
   queryFn: () => getSheetRange({ data: { range: "'Download History'!A1:F2000" } }),
-  staleTime: 10_000,
+  staleTime: 30_000,
 });
 
 export const Route = createFileRoute("/_authenticated/downloads")({

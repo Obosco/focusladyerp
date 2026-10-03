@@ -10,9 +10,11 @@ export const getRouter = () => {
         gcTime: 5 * 60_000,
         retry: (count, error) => {
           if (count >= 2) return false;
-          return error instanceof Error
-            ? /Google Sheets|network|fetch/i.test(error.message)
-            : true;
+          if (!(error instanceof Error)) return true;
+          if (/RESOURCE_EXHAUSTED|quota|rate[ -]?limit|HTTP 429/i.test(error.message)) {
+            return false;
+          }
+          return /Google Sheets|network|fetch/i.test(error.message);
         },
         refetchOnWindowFocus: false,
         refetchOnReconnect: true,

@@ -6,6 +6,11 @@ import { invoiceTotals } from "./invoice";
 
 export type SheetValues = string[][];
 
+const SHEET_READ_CACHE_TTL_MS = 30_000;
+const sheetReadCache = new Map<string, { values: SheetValues; expiresAt: number }>();
+const inFlightSheetReads = new Map<string, Promise<SheetValues>>();
+let sheetCacheGeneration = 0;
+
 function normalizeSheetValues(values: unknown[][] | undefined): SheetValues {
   return (values ?? []).map((row) => row.map((value) => String(value ?? "")));
 }
@@ -170,6 +175,7 @@ export async function ensureSheet(title: string, header: string[] = []) {
       }),
     },
   );
+  invalidateSheetCache();
 
   const created = result.replies?.[0]?.addSheet?.properties?.title;
   if (!created && resolvedHeader.length === 0) {
@@ -249,12 +255,71 @@ class SheetsRequestError extends Error {
   }
 }
 
+export function isSheetsQuotaError(error: unknown) {
+  const message = error instanceof Error ? error.message : String(error ?? "");
+  return (
+    (error instanceof SheetsRequestError && error.status === 429) ||
+    /RESOURCE_EXHAUSTED|quota|rate[ -]?limit|too many requests|HTTP 429/i.test(message)
+  );
+}
+
+export function getSheetsErrorMessage(error: unknown, fallback: string) {
+  return isSheetsQuotaError(error)
+    ? "Google Sheets is busy. Please wait a few seconds and retry."
+    : fallback;
+}
+
+async function withQuotaRetry<T>(operation: () => Promise<T>): Promise<T> {
+  for (let attempt = 0; ; attempt += 1) {
+    try {
+      return await operation();
+    } catch (error) {
+      if (!isSheetsQuotaError(error) || attempt >= 4) throw error;
+      const baseDelay = 1_000 * 2 ** attempt;
+      await new Promise((resolve) => setTimeout(resolve, baseDelay + Math.random() * 250));
+    }
+  }
+}
+
+function getCachedRange(range: string) {
+  const cached = sheetReadCache.get(range);
+  if (!cached) return undefined;
+  if (cached.expiresAt <= Date.now()) {
+    sheetReadCache.delete(range);
+    return undefined;
+  }
+  return cached.values;
+}
+
+function trackSheetRead(range: string, request: Promise<SheetValues>) {
+  const generation = sheetCacheGeneration;
+  let tracked: Promise<SheetValues>;
+  tracked = request
+    .then((values) => {
+      if (generation === sheetCacheGeneration) {
+        sheetReadCache.set(range, { values, expiresAt: Date.now() + SHEET_READ_CACHE_TTL_MS });
+      }
+      return values;
+    })
+    .finally(() => {
+      if (inFlightSheetReads.get(range) === tracked) inFlightSheetReads.delete(range);
+    });
+  inFlightSheetReads.set(range, tracked);
+  return tracked;
+}
+
+export function invalidateSheetCache() {
+  sheetCacheGeneration += 1;
+  sheetReadCache.clear();
+  inFlightSheetReads.clear();
+}
+
 async function readSheetValues(range: string): Promise<SheetValues> {
   assertAllowedRange(range);
   const title = sheetTitleFromRange(range);
   try {
     const data = await sheetsRequest<{ values?: unknown[][] }>(
-      `/values/${encodeURIComponent(range)}?valueRenderOption=UNFORMATTED_VALUE&dateTimeRenderOption=SERIAL_NUMBER`,
+      `/values/${encodeURIComponent(range)}?valueRenderOption=FORMATTED_VALUE`,
     );
     return normalizeSheetValues(data.values);
   } catch (error) {
@@ -263,53 +328,82 @@ async function readSheetValues(range: string): Promise<SheetValues> {
     }
     await ensureSheet(title, DEFAULT_SHEET_HEADERS[title] ?? []);
     const data = await sheetsRequest<{ values?: unknown[][] }>(
-      `/values/${encodeURIComponent(range)}?valueRenderOption=UNFORMATTED_VALUE&dateTimeRenderOption=SERIAL_NUMBER`,
+      `/values/${encodeURIComponent(range)}?valueRenderOption=FORMATTED_VALUE`,
     );
     return normalizeSheetValues(data.values);
   }
 }
 
 export async function readRange(range: string): Promise<SheetValues> {
-  return readSheetValues(range);
+  assertAllowedRange(range);
+  const cached = getCachedRange(range);
+  if (cached) return cached;
+  const inFlight = inFlightSheetReads.get(range);
+  if (inFlight) return inFlight;
+  return trackSheetRead(range, withQuotaRetry(() => readSheetValues(range)));
 }
 
-export async function readRanges(ranges: string[]) {
+export async function readRanges(ranges: string[]): Promise<SheetValues[]> {
   ranges.forEach(assertAllowedRange);
+
+  const reads = new Map<string, Promise<SheetValues>>();
+  const pendingRanges: string[] = [];
+  const seenRanges = new Set<string>();
+
   for (const range of ranges) {
-    const title = sheetTitleFromRange(range);
-    if (title) await ensureSheet(title, DEFAULT_SHEET_HEADERS[title] ?? []);
+    if (seenRanges.has(range)) continue;
+    seenRanges.add(range);
+    const cached = getCachedRange(range);
+    if (cached) {
+      reads.set(range, Promise.resolve(cached));
+      continue;
+    }
+    const inFlight = inFlightSheetReads.get(range);
+    if (inFlight) {
+      reads.set(range, inFlight);
+      continue;
+    }
+    pendingRanges.push(range);
   }
 
-  const params = new URLSearchParams();
-  ranges.forEach((range) => params.append("ranges", range));
-  try {
-    const data = await sheetsRequest<{ valueRanges?: { range?: string; values?: unknown[][] }[] }>(
-      `/values:batchGet?${params.toString()}&valueRenderOption=UNFORMATTED_VALUE&dateTimeRenderOption=SERIAL_NUMBER`,
-    );
-
-    return (data.valueRanges ?? []).map((valueRange) => ({
-      range: valueRange.range ?? "",
-      values: normalizeSheetValues(valueRange.values),
-    }));
-  } catch (error) {
-    // Google rejects the entire batch when one optional worksheet is missing.
-    // Retry ranges independently so dashboard/report pages can still render.
-    if (!(error instanceof SheetsRequestError) || error.status !== 400) throw error;
-    const results = await Promise.all(
-      ranges.map(async (range) => {
-        try {
-          return { range, values: await readSheetValues(range) };
-        } catch (rangeError) {
-          if (rangeError instanceof SheetsRequestError && (rangeError.status === 400 || rangeError.status === 404)) {
-            console.warn("Google Sheets range unavailable", range);
-            return { range, values: [] as SheetValues };
+  if (pendingRanges.length > 0) {
+    const batchRequest = withQuotaRetry(async () => {
+      const params = new URLSearchParams();
+      pendingRanges.forEach((range) => params.append("ranges", range));
+      const data = await sheetsRequest<{
+        valueRanges?: { range?: string; values?: unknown[][] }[];
+      }>(`/values:batchGet?${params.toString()}&valueRenderOption=FORMATTED_VALUE`);
+      return pendingRanges.map((_, index) => normalizeSheetValues(data.valueRanges?.[index]?.values));
+    }).catch(async (error: unknown) => {
+      // Google rejects the entire batch when one optional worksheet is missing.
+      if (!(error instanceof SheetsRequestError) || error.status !== 400) throw error;
+      return Promise.all(
+        pendingRanges.map(async (range) => {
+          try {
+            return await withQuotaRetry(() => readSheetValues(range));
+          } catch (rangeError) {
+            if (
+              rangeError instanceof SheetsRequestError &&
+              (rangeError.status === 400 || rangeError.status === 404)
+            ) {
+              console.warn("Google Sheets range unavailable", range);
+              return [] as SheetValues;
+            }
+            throw rangeError;
           }
-          throw rangeError;
-        }
-      }),
-    );
-    return results;
+        }),
+      );
+    });
+
+    pendingRanges.forEach((range, index) => {
+      reads.set(
+        range,
+        trackSheetRead(range, batchRequest.then((values) => values[index] ?? [])),
+      );
+    });
   }
+
+  return Promise.all(ranges.map((range) => reads.get(range)!));
 }
 
 export async function appendRows(range: string, values: SheetValues) {
@@ -322,6 +416,7 @@ export async function appendRows(range: string, values: SheetValues) {
       body: JSON.stringify({ values }),
     },
   );
+  invalidateSheetCache();
 }
 
 export async function updateRange(range: string, values: SheetValues) {
@@ -330,6 +425,7 @@ export async function updateRange(range: string, values: SheetValues) {
     method: "PUT",
     body: JSON.stringify({ values }),
   });
+  invalidateSheetCache();
 }
 
 async function clearRange(range: string) {
@@ -338,6 +434,7 @@ async function clearRange(range: string) {
     method: "POST",
     body: JSON.stringify({}),
   });
+  invalidateSheetCache();
 }
 
 /* ---------------------------------- settings --------------------------------- */
@@ -356,8 +453,7 @@ const SETTINGS_DEFAULTS: ErpSettings = {
   allowNegativeStock: false,
 };
 
-export async function readSettings(): Promise<ErpSettings> {
-  const rows = await readRange("Settings!A2:B50");
+function parseSettings(rows: SheetValues): ErpSettings {
   const map = new Map(rows.map((r) => [(r[0] ?? "").trim(), (r[1] ?? "").trim()]));
   const num = (k: string, d: number) => {
     const n = parseFloat(map.get(k) ?? "");
@@ -371,6 +467,10 @@ export async function readSettings(): Promise<ErpSettings> {
     allowNegativeStock:
       (map.get("allow_negative_stock") ?? "false").toLowerCase() === "true",
   };
+}
+
+export async function readSettings(): Promise<ErpSettings> {
+  return parseSettings(await readRange("Settings!A2:B50"));
 }
 
 export async function writeSettings(s: ErpSettings) {
@@ -441,9 +541,9 @@ function isValidBarcode(value: string, type?: string) {
 async function checkDuplicateBarcode(barcode: string, skipId?: string) {
   const clean = normalizeBarcode(barcode);
   if (!clean) return false;
-  const [productRows, variantRows] = await Promise.all([
-    readRange("Products!A2:Q2000"),
-    readRange("Product Variants!A2:Q2000"),
+  const [productRows, variantRows] = await readRanges([
+    "Products!A2:Q2000",
+    "Product Variants!A2:Q2000",
   ]);
 
   const productMatches = productRows.some((row) => {
@@ -776,13 +876,7 @@ function parseDealerOrderRow(row: string[]): Omit<DealerOrderRecord, "items"> {
   };
 }
 
-async function readDealerOrderRecords(): Promise<DealerOrderRecord[]> {
-  await ensureSheet("Dealer Orders", DEFAULT_SHEET_HEADERS["Dealer Orders"]);
-  await ensureSheet("Dealer Order Items", DEFAULT_SHEET_HEADERS["Dealer Order Items"]);
-  const [orders, items] = await Promise.all([
-    readRange("'Dealer Orders'!A2:X5000"),
-    readRange("'Dealer Order Items'!A2:M20000"),
-  ]);
+function parseDealerOrderRecords(orders: SheetValues, items: SheetValues): DealerOrderRecord[] {
   const itemsByOrder = new Map<string, DealerOrderRecord["items"]>();
   for (const row of items) {
     const orderId = String(row[0] ?? "");
@@ -800,6 +894,14 @@ async function readDealerOrderRecords(): Promise<DealerOrderRecord[]> {
     const order = parseDealerOrderRow(row);
     return { ...order, items: itemsByOrder.get(order.orderId) ?? [] };
   }).reverse();
+}
+
+async function readDealerOrderRecords(): Promise<DealerOrderRecord[]> {
+  const [orders, items] = await readRanges([
+    "'Dealer Orders'!A2:X5000",
+    "'Dealer Order Items'!A2:M20000",
+  ]);
+  return parseDealerOrderRecords(orders, items);
 }
 
 export async function getDealerOrders() {
@@ -830,10 +932,17 @@ export async function createDealerOrder(input: DealerOrderInput, actor: DealerOr
   }
   const role = actor.role.toLowerCase();
   const canBackorder = role === "admin" || role === "manager";
-  const [customers, products, variants, settings, existingOrders] = await Promise.all([
-    readRange("Customers!A2:T5000"), readRange("Products!A2:Q2000"),
-    readRange("'Product Variants'!A2:Q2000"), readSettings(), readDealerOrderRecords(),
-  ]);
+  const [customers, products, variants, settingsRows, orderRows, orderItemRows] =
+    await readRanges([
+      "Customers!A2:T5000",
+      "Products!A2:Q2000",
+      "'Product Variants'!A2:Q2000",
+      "Settings!A2:B50",
+      "'Dealer Orders'!A2:X5000",
+      "'Dealer Order Items'!A2:M20000",
+    ]);
+  const settings = parseSettings(settingsRows);
+  const existingOrders = parseDealerOrderRecords(orderRows, orderItemRows);
   const dealer = customers.find((row) => String(row[0] ?? "") === input.dealerId && String(row[1] ?? "").trim());
   if (!dealer || !["wholesale", "bulk"].includes(String(dealer[7] ?? "Retail").toLowerCase())) {
     throw new Error("Select an existing wholesale or bulk dealer.");

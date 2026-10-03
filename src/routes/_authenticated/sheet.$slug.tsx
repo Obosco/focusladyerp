@@ -23,6 +23,7 @@ const sheetQuery = (sheet: string) =>
     staleTime: 30_000,
     retry: (failureCount, error) => {
       const message = error instanceof Error ? error.message : String(error ?? "");
+      if (/Google Sheets is busy|RESOURCE_EXHAUSTED|quota|rate[ -]?limit|HTTP 429/i.test(message)) return false;
       if (message.includes("Unable to load") || message.includes("not available")) return false;
       return failureCount < 2;
     },

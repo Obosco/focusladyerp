@@ -6,13 +6,13 @@ import { DealerOrderComposer, type DealerCatalogItem, type DealerOption } from "
 import { ErpShell } from "@/components/ErpShell";
 import { Button } from "@/components/ui/button";
 import { getCurrentUserRole } from "@/lib/auth.functions";
-import { createDealerSalesOrder, getDealerOrdersList, getErpSettings, getSheetsBatch } from "@/lib/sheets.functions";
+import { createDealerSalesOrder, getDealerOrdersList, getSheetsBatch } from "@/lib/sheets.functions";
 import { ArrowLeft, Store } from "lucide-react";
 import { toast } from "sonner";
 
 const masterQuery = {
   queryKey: ["erp", "dealer-order-masters"],
-  queryFn: () => getSheetsBatch({ data: { ranges: ["Customers!A2:T5000", "Products!A2:Q2000", "'Product Variants'!A2:Q2000"] } }),
+  queryFn: () => getSheetsBatch({ data: { ranges: ["Customers!A2:T5000", "Products!A2:Q2000", "'Product Variants'!A2:Q2000", "Settings!A2:B50"] } }),
   staleTime: 30_000,
 };
 const num = (value: unknown) => { const parsed = Number(String(value ?? "").replace(/[^\d.-]/g, "")); return Number.isFinite(parsed) ? parsed : 0; };
@@ -30,13 +30,14 @@ function DealerOrderingPage() {
   const [dealerId, setDealerId] = useState("");
   const [busy, setBusy] = useState(false);
   const { data, isLoading, error, refetch } = useQuery(masterQuery);
-  const { data: settings } = useQuery({ queryKey: ["erp", "settings"], queryFn: () => getErpSettings(), staleTime: 30_000 });
   const { data: roleData } = useQuery({ queryKey: ["erp", "current-user-role"], queryFn: () => getCurrentUserRole(), staleTime: 60_000 });
-  const { data: allOrders = [] } = useQuery({ queryKey: ["erp", "dealer-orders"], queryFn: () => getDealerOrdersList(), staleTime: 15_000 });
+  const { data: allOrders = [] } = useQuery({ queryKey: ["erp", "dealer-orders"], queryFn: () => getDealerOrdersList(), staleTime: 30_000 });
   const save = useServerFn(createDealerSalesOrder);
   const customerRows = data?.valueRanges?.[0]?.values ?? [];
   const productRows = data?.valueRanges?.[1]?.values ?? [];
   const variantRows = data?.valueRanges?.[2]?.values ?? [];
+  const settingsRows = data?.valueRanges?.[3]?.values ?? [];
+  const settings = new Map(settingsRows.map((row) => [row[0] ?? "", row[1] ?? ""]));
   const dealers: DealerOption[] = useMemo(() => customerRows.filter((row) => row[1] && ["wholesale", "bulk"].includes(String(row[7] ?? "").toLowerCase())).map((row) => ({ id: String(row[0] ?? ""), name: String(row[1] ?? ""), phone: String(row[2] ?? ""), address: String(row[3] ?? ""), city: String(row[4] ?? ""), district: String(row[5] ?? ""), pinCode: "" })), [customerRows]);
   const catalog: DealerCatalogItem[] = useMemo(() => {
     const products = productRows.filter((row) => row[1]);
@@ -77,7 +78,7 @@ function DealerOrderingPage() {
       </section>
 
       {selectedDealer ? <>
-        <DealerOrderComposer key={selectedDealer.id} dealers={[selectedDealer]} defaultDealerId={selectedDealer.id} defaultDelivery={selectedDealer} catalog={catalog} taxPercent={Number(settings?.defaultGstPercent ?? 0)} canBackorder={canBackorder} onSubmit={createOrder} submitting={busy} />
+        <DealerOrderComposer key={selectedDealer.id} dealers={[selectedDealer]} defaultDealerId={selectedDealer.id} defaultDelivery={selectedDealer} catalog={catalog} taxPercent={Number(settings.get("default_gst_percent") ?? 0) || 0} canBackorder={canBackorder} onSubmit={createOrder} submitting={busy} />
         <section className="space-y-3 border-t border-border pt-5">
           <div className="flex items-baseline justify-between gap-3"><h2 className="font-semibold">Recent orders · {selectedDealer.name}</h2><span className="text-xs text-muted-foreground">Latest 10</span></div>
           {recentOrders.length ? <div className="divide-y divide-border border-y border-border">{recentOrders.map((order) => <Link key={order.orderId} to="/dealer-orders/$orderId" params={{ orderId: order.orderId }} className="flex flex-wrap items-center justify-between gap-3 py-3 hover:bg-muted/30"><span><span className="font-medium">{order.orderId}</span><span className="ml-2 text-xs text-muted-foreground">{new Date(order.createdAt).toLocaleDateString("en-IN")}</span></span><span className="text-sm">{order.totalQuantity} units · {money(order.grandTotal)} · {order.status}</span></Link>)}</div> : <p className="border-y border-dashed border-border py-5 text-sm text-muted-foreground">No orders for this dealer yet.</p>}

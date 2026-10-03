@@ -3,6 +3,8 @@ import { assertAuthenticated } from "./auth.server";
 import {
   readRange,
   readRanges,
+  getSheetsErrorMessage,
+  isSheetsQuotaError,
   appendRows,
   saveInvoice,
   nextInvoiceNumber,
@@ -81,7 +83,7 @@ export const getSheetRange = createServerFn({ method: "GET" })
       });
       return {
         success: false as const,
-        error: `Unable to load ${sheetName}`,
+        error: getSheetsErrorMessage(error, `Unable to load ${sheetName}`),
         data: [] as string[][],
         values: [] as string[][],
       };
@@ -99,7 +101,11 @@ export const getSheetsBatch = createServerFn({ method: "GET" })
   })
   .handler(async ({ data }) => {
     try {
-      const valueRanges = await readRanges(data.ranges);
+      const values = await readRanges(data.ranges);
+      const valueRanges = values.map((rangeValues, index) => ({
+        range: data.ranges[index] ?? "",
+        values: rangeValues,
+      }));
       return {
         success: true as const,
         valueRanges,
@@ -112,6 +118,9 @@ export const getSheetsBatch = createServerFn({ method: "GET" })
         sheetName,
         error: error instanceof Error ? error.message : error,
       });
+      if (isSheetsQuotaError(error)) {
+        throw new Error(getSheetsErrorMessage(error, "Unable to load sheet data"));
+      }
       return {
         success: false as const,
         error: "Unable to load sheet data",

@@ -11,7 +11,6 @@ import { Label } from "@/components/ui/label";
 import {
   addCustomer,
   createInvoice,
-  getErpSettings,
   getNextInvoiceNumber,
   getSheetsBatch,
   updateStockLevel,
@@ -63,7 +62,7 @@ const productQuery = {
         ],
       },
     }),
-  staleTime: 15_000,
+  staleTime: 30_000,
 };
 
 function parseCatalog(productRows: string[][], variantRows: string[][]): CatalogItem[] {
@@ -166,11 +165,6 @@ function findCatalogMatch(catalog: CatalogItem[], value: string): CatalogItem | 
 function PosPage() {
   const queryClient = useQueryClient();
   const { data: payload } = useQuery(productQuery);
-  const { data: settings } = useQuery({
-    queryKey: ["erp", "settings"],
-    queryFn: () => getErpSettings(),
-    staleTime: 30_000,
-  });
 
   const saveInvoice = useServerFn(createInvoice);
   const nextInvoice = useServerFn(getNextInvoiceNumber);
@@ -181,6 +175,8 @@ function PosPage() {
   const variantRows = (payload?.valueRanges?.[1]?.values ?? []) as string[][];
   const customerRows = (payload?.valueRanges?.[2]?.values ?? []) as string[][];
   const salesRows = (payload?.valueRanges?.[3]?.values ?? []) as string[][];
+  const settingsRows = (payload?.valueRanges?.[4]?.values ?? []) as string[][];
+  const settings = new Map(settingsRows.map((row) => [row[0] ?? "", row[1] ?? ""]));
 
   const catalog = useMemo(
     () => parseCatalog(productRows, variantRows),
@@ -202,8 +198,8 @@ function PosPage() {
   const [notes, setNotes] = useState("");
   const [busy, setBusy] = useState(false);
 
-  const allowNegativeStock = Boolean(settings?.allowNegativeStock ?? false);
-  const taxPercent = Number(settings?.defaultGstPercent ?? 0);
+  const allowNegativeStock = (settings.get("allow_negative_stock") ?? "false").toLowerCase() === "true";
+  const taxPercent = Number(settings.get("default_gst_percent") ?? 0) || 0;
 
   const cartSubtotal = cart.reduce((sum, item) => sum + item.price * item.qty, 0);
   const cartDiscount =

@@ -16,7 +16,7 @@ import { amountInWords, COMPANY, emptyItem, invoiceTotals, itemValues, modeLabel
 const mastersQuery = queryOptions({
   queryKey: ["erp", "invoice-masters"],
   queryFn: () => getSheetsBatch({ data: { ranges: ["Customers!A2:T5000", "Products!A2:I1000", "Sales!A2:A2000"] } }),
-  staleTime: 15_000,
+ staleTime: 30_000,
 });
 
 export const Route = createFileRoute("/_authenticated/invoices/new")({

@@ -37,6 +37,9 @@ export function createErpQueryOptions<T>(
     gcTime: ttlMs + 60_000,
     retry: (count, error) => {
       if (count >= 2) return false;
+      if (error instanceof Error && /Google Sheets is busy|RESOURCE_EXHAUSTED|quota|rate[ -]?limit|HTTP 429/i.test(error.message)) {
+        return false;
+      }
       return error instanceof Error ? /Google Sheets|network|fetch/i.test(error.message) : true;
     },
     refetchOnWindowFocus: false,
