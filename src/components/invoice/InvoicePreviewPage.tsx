@@ -8,11 +8,13 @@ import type { Invoice } from "./invoice.types";
 export function InvoicePreviewPage({
   invoice,
   backHref = "/invoices",
+  showBack = true,
   sampleNotice,
   onPreview,
 }: {
   invoice: Invoice;
   backHref?: "/invoices";
+  showBack?: boolean;
   sampleNotice?: string;
   onPreview?: () => void;
 }) {
@@ -38,12 +40,16 @@ export function InvoicePreviewPage({
   return (
     <div className="gst-invoice-preview-page">
       <div className="gst-invoice-toolbar no-print">
-        <Button variant="outline" size="sm" asChild>
-          <Link to={backHref}>
-            <ArrowLeft className="mr-2 h-4 w-4" />
-            Back
-          </Link>
-        </Button>
+        {showBack ? (
+          <Button variant="outline" size="sm" asChild>
+            <Link to={backHref}>
+              <ArrowLeft className="mr-2 h-4 w-4" />
+              Back
+            </Link>
+          </Button>
+        ) : (
+          <span />
+        )}
         <div className="gst-invoice-toolbar-actions">
           {onPreview ? (
             <Button variant="outline" size="sm" onClick={onPreview}>
@@ -57,8 +63,8 @@ export function InvoicePreviewPage({
         <div
           className="gst-invoice-scale-frame"
           style={{
-            width: `calc(210mm * ${scale})`,
-            height: `calc(${297 * Math.max(1, Math.ceil(invoice.items.length / 10))}mm * ${scale})`,
+            width: `${210 * scale}mm`,
+            height: `${297 * Math.max(1, Math.ceil(invoice.items.length / 10)) * scale}mm`,
           }}
         >
           <div

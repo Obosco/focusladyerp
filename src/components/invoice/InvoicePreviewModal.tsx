@@ -188,7 +188,13 @@ export function InvoicePreviewModal({
           </div>
         </div>
         {exportError ? <p className="invoice-modal-error no-print">{exportError}</p> : null}
-        <div className="invoice-modal-viewport" ref={viewportRef}>
+        <div
+          className="invoice-modal-viewport"
+          ref={viewportRef}
+          onMouseDown={(event) => {
+            if (event.target === event.currentTarget) onClose();
+          }}
+        >
           {loading ? (
             <p className="invoice-modal-message">Loading invoice...</p>
           ) : !safeInvoice ? (
@@ -199,8 +205,8 @@ export function InvoicePreviewModal({
             <div
               className="invoice-modal-scale-frame"
               style={{
-                width: `calc(210mm * ${scale})`,
-                height: `calc(${297 * pageCount}mm * ${scale})`,
+                width: `${210 * scale}mm`,
+                height: `${297 * pageCount * scale}mm`,
               }}
             >
               <div

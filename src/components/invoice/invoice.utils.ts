@@ -34,7 +34,7 @@ const asRecord = (value: unknown): Record<string, unknown> =>
 const asText = (value: unknown) => String(value ?? "").trim();
 
 const asNumber = (value: unknown) => {
-  const normalized = typeof value === "string" ? value.replace(/,/g, "").trim() : value;
+  const normalized = asText(value).replace(/,/g, "");
   const number = Number(normalized);
   return Number.isFinite(number) ? number : 0;
 };
@@ -50,7 +50,7 @@ export function normalizeInvoice(value: unknown): Invoice | null {
   return {
     seller: {
       name: asText(seller.name),
-      logoUrl: asText(seller.logoUrl),
+      logoUrl: asText(seller.logoUrl) || "/focus-lady-logo.png",
       addressLines: strings(seller.addressLines),
       phone: asText(seller.phone),
       email: asText(seller.email),
@@ -91,7 +91,6 @@ export function normalizeInvoice(value: unknown): Invoice | null {
     footerNote: asText(root.footerNote),
   };
 }
-
 
 export function formatINR(value: number) {
   return new Intl.NumberFormat("en-IN", {
@@ -147,7 +146,7 @@ function underThousand(value: number): string {
 }
 
 export function amountInWords(amount: number) {
-  const value = Math.max(0, Math.round(amount));
+  const value = Number.isFinite(amount) ? Math.max(0, Math.round(amount)) : 0;
   if (!value) return "Rupees Zero Only";
 
   const indianNumber = (number: number): string => {
@@ -228,4 +227,3 @@ export function calculateInvoice(invoice: Invoice): CalculatedInvoice {
     finalTotal,
   };
 }
-

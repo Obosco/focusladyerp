@@ -28,21 +28,25 @@ test("calculates the B2C sample invoice and reconciles rounded total", () => {
 
 test("formats Indian amount words and invoice dates", () => {
   assert.equal(amountInWords(1936), "Rupees One Thousand Nine Hundred Thirty Six Only");
+  assert.equal(amountInWords(Number.NaN), "Rupees Zero Only");
   assert.equal(dateFormat("2026-10-01"), "01-Oct-2026");
 });
 
 test("normalizes missing and non-string customer values safely", () => {
   const normalized = normalizeInvoice({
+    seller: { logoUrl: undefined },
     customer: { name: undefined, gstin: 12345, address: null, phone: false },
-    items: [{ description: 42, hsn: undefined, qty: "2", rate: 10, gstPercent: "5" }],
+    items: [{ description: 42, hsn: undefined, qty: "2", rate: 10, gstPercent: "5" }, undefined],
   });
 
+  assert.equal(normalized?.seller.logoUrl, "/focus-lady-logo.png");
   assert.equal(normalized?.customer.name, "Walk-in Customer");
   assert.equal(normalized?.customer.gstin, "12345");
   assert.equal(normalized?.customer.phone, "false");
   assert.equal(normalized?.items[0]?.description, "42");
   assert.ok(normalized);
-  assert.equal(calculateInvoice(normalized).lines.length, 1);
+  assert.equal(normalized.items.length, 2);
+  assert.equal(calculateInvoice(normalized).lines.length, 2);
 });
 
 test("clamps invalid discounts so tax remains non-negative", () => {

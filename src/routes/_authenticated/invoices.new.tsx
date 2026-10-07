@@ -8,10 +8,14 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Plus, Printer, Save, Trash2 } from "lucide-react";
+import { Plus, Save, Trash2 } from "lucide-react";
 import { toast } from "sonner";
 import { notifyUpdate } from "@/lib/notify";
 import { amountInWords, COMPANY, emptyItem, invoiceTotals, itemValues, modeLabel, type InvoiceDraft, type InvoiceItem, type InvoiceMode } from "@/lib/invoice";
+import { InvoicePreviewModal } from "@/components/invoice/InvoicePreviewModal";
+import { InvoicePreviewPage } from "@/components/invoice/InvoicePreviewPage";
+import { SAMPLE_INVOICE } from "@/components/invoice/sample-invoice";
+import type { Invoice } from "@/components/invoice/invoice.types";
 
 const mastersQuery = queryOptions({
   queryKey: ["erp", "invoice-masters"],
@@ -29,6 +33,55 @@ const money = (value: number) => value.toLocaleString("en-IN", { minimumFraction
 const inputClass = "h-8 rounded-none border-black/40 bg-white text-xs";
 
 type CustomerRow = string[];
+
+function toPrintableInvoice(draft: InvoiceDraft): Invoice {
+  const stateName = draft.customerState.trim() || SAMPLE_INVOICE.seller.stateName;
+  const stateCode =
+    draft.gstin.trim().slice(0, 2) || (stateName.toLowerCase() === "kerala" ? "32" : "");
+  const extraTerms = [
+    ...(draft.mode === "quotation" && draft.validUntil
+      ? [`Valid until: ${draft.validUntil}`]
+      : []),
+    ...(draft.notes.trim() ? [`Notes: ${draft.notes.trim()}`] : []),
+  ];
+
+  return {
+    ...SAMPLE_INVOICE,
+    invoice: {
+      ...SAMPLE_INVOICE.invoice,
+      type:
+        draft.mode === "gst" ? "TAX INVOICE" : draft.mode === "quotation" ? "QUOTATION" : "BILL",
+      category: "B2C",
+      copyLabel: draft.mode === "quotation" ? "QUOTATION" : "ORIGINAL FOR RECIPIENT",
+      number: draft.invoice,
+      date: draft.date,
+      placeOfSupply: `${stateName}${stateCode ? ` (${stateCode})` : ""}`,
+      paymentMode: draft.paymentMode,
+      supplyType:
+        stateName.toLowerCase() === SAMPLE_INVOICE.seller.stateName.toLowerCase()
+          ? "INTRA"
+          : "INTER",
+    },
+    customer: {
+      name: draft.customer,
+      address: [draft.customerAddress, draft.customerCity, draft.customerState]
+        .map((value) => value.trim())
+        .filter(Boolean)
+        .join(", "),
+      phone: draft.customerPhone,
+      gstin: draft.gstin,
+    },
+    items: draft.items.map((item) => ({
+      description: item.product,
+      hsn: item.hsn,
+      qty: item.qty,
+      rate: item.rate,
+      gstPercent: draft.mode === "gst" ? item.gstPercent : 0,
+    })),
+    discount: draft.discount,
+    terms: [...SAMPLE_INVOICE.terms, ...extraTerms],
+  };
+}
 
 function Field({ label, value, setValue, type = "text", className = "", readOnly = false, list }: { label: string; value: string; setValue?: (value: string) => void; type?: string; className?: string; readOnly?: boolean; list?: string }) {
   return <div className={className}><Label className="text-[10px]">{label}</Label><Input className={inputClass} type={type} value={value} readOnly={readOnly} list={list} onChange={(event) => setValue?.(event.target.value)} /></div>;
@@ -64,6 +117,7 @@ function InvoiceEditor() {
   const [paymentMode, setPaymentMode] = useState("Cash");
   const [notes, setNotes] = useState("");
   const [busy, setBusy] = useState(false);
+  const [previewOpen, setPreviewOpen] = useState(false);
   const invoice = useMemo(() => {
     if (mode === "quotation") return `QT-${date.replace(/-/g, "")}-${String(existing.length + 1).padStart(3, "0")}`;
     const prefix = `FLB-${date.replace(/-/g, "")}-`;
@@ -78,6 +132,7 @@ function InvoiceEditor() {
     setCustomerId(match[0] ?? ""); setCustomerPhone(match[2] ?? ""); setCustomerAddress(match[3] ?? ""); setCustomerCity(match[4] ?? ""); setCustomerState(match[5] ?? ""); setGstin(match[6] ?? "");
   };
   const draft: InvoiceDraft = { mode, invoice, customerId, date, validUntil, customer, customerPhone, customerAddress, customerCity, customerState, gstin, items, discount, paid, paymentMode, notes };
+  const printableInvoice = toPrintableInvoice(draft);
   const totals = invoiceTotals(draft);
   const setItem = (index: number, patch: Partial<InvoiceItem>) => setItems((current) => current.map((item, itemIndex) => itemIndex === index ? { ...item, ...patch } : item));
   const chooseProduct = (index: number, name: string) => { const product = products.find((row) => row[1] === name); setItem(index, { product: name, hsn: product?.[0] ?? "", rate: Number(product?.[5] ?? 0), gstPercent: Number(product?.[8] ?? 0) }); };
@@ -100,7 +155,18 @@ function InvoiceEditor() {
       <Card><CardHeader className="flex-row items-center justify-between"><CardTitle className="text-sm">Product Rows</CardTitle><Button variant="outline" size="sm" className="rounded-none" onClick={() => setItems((current) => [...current, emptyItem()])}><Plus className="mr-1 h-4 w-4" />Add row</Button></CardHeader><CardContent className="space-y-2">{items.map((item, index) => <div key={index} className="grid grid-cols-12 gap-2 border-b border-black/10 pb-2"><Field label="Description" value={item.product} setValue={(value) => chooseProduct(index, value)} list="products" className="col-span-5" />{mode === "gst" && <Field label="HSN" value={item.hsn} setValue={(value) => setItem(index, { hsn: value })} className="col-span-2" />}<Field label="Qty" value={String(item.qty)} setValue={(value) => setItem(index, { qty: Number(value) })} type="number" className="col-span-2" /><Field label="Rate" value={String(item.rate)} setValue={(value) => setItem(index, { rate: Number(value) })} type="number" className="col-span-2" /><Button variant="ghost" size="icon" className="mt-4 h-8 w-8" disabled={items.length === 1} onClick={() => setItems((current) => current.filter((_, itemIndex) => itemIndex !== index))}><Trash2 className="h-4 w-4" /></Button>{mode === "gst" && <Field label="GST %" value={String(item.gstPercent)} setValue={(value) => setItem(index, { gstPercent: Number(value) })} type="number" className="col-span-2" />}<div className="col-span-5 self-end text-right text-xs">Taxable {money(itemValues(item, mode).taxable)} | Total {money(itemValues(item, mode).total)}</div></div>)}<datalist id="products">{products.map((row, index) => <option key={index} value={row[1]} />)}</datalist><datalist id="customers">{customers.map((row, index) => (<Fragment key={index}><option value={row[1]} /><option value={row[2]} /></Fragment>))}</datalist></CardContent></Card>
       <Card><CardHeader><CardTitle className="text-sm">Payment</CardTitle></CardHeader><CardContent className="grid grid-cols-2 gap-3"><Field label="Discount" value={String(discount)} setValue={(value) => setDiscount(Number(value))} type="number" /><Field label="Paid" value={String(paid)} setValue={(value) => setPaid(Number(value))} type="number" /><Field label="Payment Mode" value={paymentMode} setValue={setPaymentMode} /><Field label="Notes" value={notes} setValue={setNotes} className="col-span-2" /><div className="col-span-2 flex justify-between border-t border-black pt-2 font-semibold">Total <span>{money(totals.total)}</span></div><Button className="col-span-2 rounded-none bg-black text-white hover:bg-black/80" onClick={submit} disabled={busy}><Save className="mr-2 h-4 w-4" />{busy ? "Saving..." : "Save Invoice"}</Button></CardContent></Card>
     </div>
-    <div><div className="mb-3 flex gap-2 print:hidden"><Button variant="outline" size="sm" className="rounded-none" onClick={() => window.print()}><Printer className="mr-2 h-4 w-4" />Print / PDF</Button></div><InvoicePreview draft={draft} /></div>
+    <div>
+      <InvoicePreviewPage
+        invoice={printableInvoice}
+        showBack={false}
+        onPreview={() => setPreviewOpen(true)}
+      />
+      <InvoicePreviewModal
+        open={previewOpen}
+        invoice={printableInvoice}
+        onClose={() => setPreviewOpen(false)}
+      />
+    </div>
   </div>;
 }
 
