@@ -5,11 +5,6 @@ const outputDirs = [
   join(process.cwd(), ".vercel", "output", "static"),
   join(process.cwd(), ".output", "public"),
 ];
-const publicDir = outputDirs.find((directory) => existsSync(directory));
-if (!publicDir) {
-  console.error("PWA check failed. No production public output directory was found.");
-  process.exit(1);
-}
 const requiredFiles = [
   "manifest.webmanifest",
   "sw.js",
@@ -18,11 +13,19 @@ const requiredFiles = [
   "icon-192.png",
   "icon-512.png",
   "icon-maskable-512.png",
+  "focus-lady-logo.png",
 ];
 
-const missing = requiredFiles.filter((file) => !existsSync(join(publicDir, file)));
-if (missing.length > 0) {
-  console.error(`PWA check failed. Missing: ${missing.join(", ")}`);
+const availableDirs = outputDirs.filter((directory) => existsSync(directory));
+const publicDir = availableDirs.find((directory) =>
+  requiredFiles.every((file) => existsSync(join(directory, file))),
+);
+if (!publicDir) {
+  const missing = requiredFiles.filter(
+    (file) => !availableDirs.some((directory) => existsSync(join(directory, file))),
+  );
+  const detail = missing.length ? ` Missing: ${missing.join(", ")}.` : "";
+  console.error(`PWA check failed. No production output contains all required files.${detail}`);
   process.exit(1);
 }
 
@@ -33,8 +36,12 @@ if (manifest.display !== "standalone" || !manifest.start_url || !Array.isArray(m
 }
 
 const serviceWorker = readFileSync(join(publicDir, "sw.js"), "utf8");
-if (!serviceWorker.includes("addEventListener(\"fetch\"")) {
+if (!serviceWorker.includes('addEventListener("fetch"')) {
   console.error("PWA check failed. Service worker has no fetch handler.");
+  process.exit(1);
+}
+if (!serviceWorker.includes("/focus-lady-logo.png")) {
+  console.error("PWA check failed. Invoice logo is not precached.");
   process.exit(1);
 }
 

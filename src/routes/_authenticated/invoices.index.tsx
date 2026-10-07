@@ -5,9 +5,11 @@ import { ErpShell } from "@/components/ErpShell";
 import { getSheetRange } from "@/lib/sheets.functions";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { FileText, Plus } from "lucide-react";
+import { Eye, FileText, Plus } from "lucide-react";
 import { exportTablePdf } from "@/lib/pdf";
 import { formatDateIndia, normalizeDate } from "@/lib/erp-data";
+
+const sheetText = (value: unknown) => String(value ?? "").trim();
 
 const salesQuery = queryOptions({
   queryKey: ["erp", "sales-history"],
@@ -21,8 +23,7 @@ export const Route = createFileRoute("/_authenticated/invoices/")({
       { title: "Invoice History — Focus Lady Bra ERP" },
       {
         name: "description",
-        content:
-          "Search, filter by date, download and reprint every Focus Lady Bra sales invoice.",
+        content: "Search, filter by date, download and reprint every Focus Lady Bra sales invoice.",
       },
       { property: "og:title", content: "Invoice History — Focus Lady Bra ERP" },
       {
@@ -69,16 +70,19 @@ function InvoiceList() {
   const [from, setFrom] = useState("");
   const [to, setTo] = useState("");
 
-  const values = Array.isArray(data?.values) ? data.values : Array.isArray(data?.data) ? data.data : [];
-  const rows = useMemo(
-    () => values.filter((r) => Array.isArray(r) && (r[0] ?? "").trim() !== ""),
-    [values],
-  );
+  const rows = useMemo(() => {
+    const values = Array.isArray(data?.values)
+      ? data.values
+      : Array.isArray(data?.data)
+        ? data.data
+        : [];
+    return values.filter((r) => Array.isArray(r) && sheetText(r[0]) !== "");
+  }, [data]);
 
   const filtered = useMemo(
     () =>
       rows.filter((r) => {
-        const hay = `${r[0]} ${r[2]} ${r[8]}`.toLowerCase();
+        const hay = `${sheetText(r[0])} ${sheetText(r[2])} ${sheetText(r[8])}`.toLowerCase();
         if (q.trim() && !hay.includes(q.toLowerCase())) return false;
         const d = normalizeDate(r[1]);
         if (from && d < from) return false;
@@ -164,17 +168,19 @@ function InvoiceList() {
         <table className="w-full text-sm">
           <thead className="bg-muted/50 text-left text-xs uppercase tracking-wider text-muted-foreground">
             <tr>
-              {["Invoice", "Date", "Customer", "Total", "Paid", "Due", "Status"].map((h) => (
-                <th key={h} className="px-4 py-3 font-medium">
-                  {h}
-                </th>
-              ))}
+              {["Invoice", "Date", "Customer", "Total", "Paid", "Due", "Status", "Preview"].map(
+                (h) => (
+                  <th key={h} className="px-4 py-3 font-medium">
+                    {h}
+                  </th>
+                ),
+              )}
             </tr>
           </thead>
           <tbody>
             {filtered.length === 0 ? (
               <tr>
-                <td colSpan={7} className="px-4 py-10 text-center text-muted-foreground">
+                <td colSpan={8} className="px-4 py-10 text-center text-muted-foreground">
                   No invoices yet.
                 </td>
               </tr>
@@ -184,18 +190,29 @@ function InvoiceList() {
                   <td className="px-4 py-2.5">
                     <Link
                       to="/invoices/$invoice"
-                      params={{ invoice: r[0] ?? "" }}
+                      params={{ invoice: sheetText(r[0]) }}
                       className="font-medium text-primary underline-offset-2 hover:underline"
                     >
-                      {r[0]}
+                      {sheetText(r[0])}
                     </Link>
                   </td>
                   <td className="px-4 py-2.5">{formatDateIndia(r[1])}</td>
-                  <td className="px-4 py-2.5">{r[2]}</td>
+                  <td className="px-4 py-2.5">{sheetText(r[2])}</td>
                   <td className="px-4 py-2.5">{money(r[5] ?? "")}</td>
                   <td className="px-4 py-2.5">{money(r[6] ?? "")}</td>
                   <td className="px-4 py-2.5">{money(r[7] ?? "")}</td>
-                  <td className="px-4 py-2.5">{r[8]}</td>
+                  <td className="px-4 py-2.5">{sheetText(r[8])}</td>
+                  <td className="px-4 py-2.5">
+                    <Button variant="ghost" size="sm" asChild>
+                      <Link
+                        to="/invoices/$invoice"
+                        params={{ invoice: String(r[0] ?? "") }}
+                        search={{ preview: true }}
+                      >
+                        <Eye className="mr-2 h-4 w-4" /> Preview / Print
+                      </Link>
+                    </Button>
+                  </td>
                 </tr>
               ))
             )}

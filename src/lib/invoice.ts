@@ -4,7 +4,15 @@ export type InvoiceDraft = { mode: InvoiceMode; invoice: string; customerId: str
 export const COMPANY = { name: "OBOSCO CLOTHING INDUSTRIES", address: "Near by Police Station Tanur, First Floor 22/242", state: "Kerala", phone: "+91 8089457918" };
 export const emptyItem = (): InvoiceItem => ({ product: "", hsn: "", qty: 1, rate: 0, gstPercent: 0 });
 export function itemValues(item: InvoiceItem, mode: InvoiceMode) { const taxable = Math.max(0, (item.qty || 0) * (item.rate || 0)); const gst = mode === "gst" ? +(taxable * ((item.gstPercent || 0) / 100)).toFixed(2) : 0; return { taxable, gst, total: +(taxable + gst).toFixed(2) }; }
-export function invoiceTotals(draft: Pick<InvoiceDraft, "mode" | "items" | "discount" | "paid">) { const taxable = draft.items.reduce((sum, item) => sum + itemValues(item, draft.mode).taxable, 0); const gst = draft.items.reduce((sum, item) => sum + itemValues(item, draft.mode).gst, 0); const subtotal = Math.max(0, taxable - (draft.discount || 0)); const total = +(subtotal + gst).toFixed(2); const paid = Math.min(Math.max(0, draft.paid || 0), total); return { taxable: +taxable.toFixed(2), subtotal: +subtotal.toFixed(2), gst: +gst.toFixed(2), total, paid, due: +(total - paid).toFixed(2) }; }
+export function invoiceTotals(draft: Pick<InvoiceDraft, "mode" | "items" | "discount" | "paid">) {
+  const taxable = draft.items.reduce((sum, item) => sum + itemValues(item, draft.mode).taxable, 0);
+  const gst = draft.items.reduce((sum, item) => sum + itemValues(item, draft.mode).gst, 0);
+  const appliedDiscount = Math.min(Math.max(0, draft.discount || 0), taxable);
+  const subtotal = Math.max(0, taxable - appliedDiscount);
+  const total = +(subtotal + gst).toFixed(2);
+  const paid = Math.min(Math.max(0, draft.paid || 0), total);
+  return { taxable: +taxable.toFixed(2), subtotal: +subtotal.toFixed(2), gst: +gst.toFixed(2), total, paid, due: +(total - paid).toFixed(2) };
+}
 const ones = ["Zero", "One", "Two", "Three", "Four", "Five", "Six", "Seven", "Eight", "Nine", "Ten", "Eleven", "Twelve", "Thirteen", "Fourteen", "Fifteen", "Sixteen", "Seventeen", "Eighteen", "Nineteen"];
 const tens = ["", "", "Twenty", "Thirty", "Forty", "Fifty", "Sixty", "Seventy", "Eighty", "Ninety"];
 function underThousand(value: number): string { if (value < 20) return ones[value]; if (value < 100) return `${tens[Math.floor(value / 10)]}${value % 10 ? ` ${ones[value % 10]}` : ""}`; return `${ones[Math.floor(value / 100)]} Hundred${value % 100 ? ` ${underThousand(value % 100)}` : ""}`; }

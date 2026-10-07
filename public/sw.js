@@ -10,7 +10,7 @@
  *                    must never be served from cache.
  */
 
-const VERSION = "v2";
+const VERSION = "v3";
 const ASSET_CACHE = `flb-erp-assets-${VERSION}`;
 const SHELL_CACHE = `flb-erp-shell-${VERSION}`;
 const CURRENT_CACHES = [ASSET_CACHE, SHELL_CACHE];
@@ -25,6 +25,7 @@ const PRECACHE_URLS = [
   "/icon-512.png",
   "/icon-maskable-512.png",
   "/apple-touch-icon.png",
+  "/focus-lady-logo.png",
 ];
 
 self.addEventListener("install", (event) => {

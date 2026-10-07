@@ -28,17 +28,90 @@ export type CalculatedInvoice = {
   finalTotal: number;
 };
 
-export function roundMoney(value: number) {
-  return Math.round((value + Number.EPSILON) * 100) / 100;
+const asRecord = (value: unknown): Record<string, unknown> =>
+  value && typeof value === "object" ? (value as Record<string, unknown>) : {};
+
+const asText = (value: unknown) => String(value ?? "").trim();
+
+const asNumber = (value: unknown) => {
+  const normalized = typeof value === "string" ? value.replace(/,/g, "").trim() : value;
+  const number = Number(normalized);
+  return Number.isFinite(number) ? number : 0;
+};
+
+export function normalizeInvoice(value: unknown): Invoice | null {
+  if (!value || typeof value !== "object") return null;
+  const root = asRecord(value);
+  const seller = asRecord(root.seller);
+  const header = asRecord(root.invoice);
+  const customer = asRecord(root.customer);
+  const strings = (field: unknown) => (Array.isArray(field) ? field.map(asText) : []);
+
+  return {
+    seller: {
+      name: asText(seller.name),
+      logoUrl: asText(seller.logoUrl),
+      addressLines: strings(seller.addressLines),
+      phone: asText(seller.phone),
+      email: asText(seller.email),
+      gstin: asText(seller.gstin),
+      stateCode: asText(seller.stateCode),
+      stateName: asText(seller.stateName),
+    },
+    invoice: {
+      type: asText(header.type),
+      category: asText(header.category),
+      copyLabel: asText(header.copyLabel),
+      number: asText(header.number),
+      date: asText(header.date),
+      placeOfSupply: asText(header.placeOfSupply),
+      paymentMode: asText(header.paymentMode),
+      supplyType: header.supplyType === "INTER" ? "INTER" : "INTRA",
+    },
+    customer: {
+      name: asText(customer.name) || "Walk-in Customer",
+      address: asText(customer.address),
+      phone: asText(customer.phone),
+      gstin: asText(customer.gstin) || "N/A (Unregistered)",
+    },
+    items: Array.isArray(root.items)
+      ? root.items.map((item) => {
+          const row = asRecord(item);
+          return {
+            description: asText(row.description),
+            hsn: asText(row.hsn),
+            qty: asNumber(row.qty),
+            rate: asNumber(row.rate),
+            gstPercent: asNumber(row.gstPercent),
+          };
+        })
+      : [],
+    discount: Math.max(0, asNumber(root.discount)),
+    terms: strings(root.terms),
+    footerNote: asText(root.footerNote),
+  };
 }
+
 
 export function formatINR(value: number) {
   return new Intl.NumberFormat("en-IN", {
-    style: "currency",
-    currency: "INR",
     minimumFractionDigits: 2,
     maximumFractionDigits: 2,
-  }).format(roundMoney(value));
+  }).format(Number.isFinite(value) ? value : 0);
+}
+
+export function dateFormat(value: unknown) {
+  const text = asText(value);
+  if (!text) return "";
+  const date = new Date(`${text.slice(0, 10)}T00:00:00`);
+  if (Number.isNaN(date.getTime())) return text;
+  const parts = new Intl.DateTimeFormat("en-GB", {
+    day: "2-digit",
+    month: "short",
+    year: "numeric",
+  }).formatToParts(date);
+  const part = (type: string) => parts.find((entry) => entry.type === type)?.value ?? "";
+  return `${part("day")}-${part("month")}-${part("year")}`;
 }
 
 const ones = [
@@ -74,37 +147,42 @@ function underThousand(value: number): string {
 }
 
 export function amountInWords(amount: number) {
-  let value = Math.max(0, Math.round(amount));
+  const value = Math.max(0, Math.round(amount));
   if (!value) return "Rupees Zero Only";
 
-  const parts: string[] = [];
-  const groups: [number, string][] = [
-    [10_000_000, "Crore"],
-    [100_000, "Lakh"],
-    [1_000, "Thousand"],
-  ];
-  for (const [size, label] of groups) {
-    if (value >= size) {
-      const group = Math.floor(value / size);
-      parts.push(`${underThousand(group)} ${label}`);
-      value %= size;
+  const indianNumber = (number: number): string => {
+    if (number < 1_000) return underThousand(number);
+    const groups: [number, string][] = [
+      [10_000_000, "Crore"],
+      [100_000, "Lakh"],
+      [1_000, "Thousand"],
+    ];
+    for (const [size, label] of groups) {
+      if (number >= size) {
+        const group = Math.floor(number / size);
+        const remainder = number % size;
+        return `${indianNumber(group)} ${label}${remainder ? ` ${indianNumber(remainder)}` : ""}`;
+      }
     }
-  }
-  if (value) parts.push(underThousand(value));
-  return `Rupees ${parts.join(" ")} Only`;
+    return "";
+  };
+
+  return `Rupees ${indianNumber(value)} Only`;
 }
 
 export function calculateInvoice(invoice: Invoice): CalculatedInvoice {
-  const lines = invoice.items.map((item) => {
-    const qty = Number.isFinite(item.qty) ? Math.max(0, item.qty) : 0;
-    const rate = Number.isFinite(item.rate) ? Math.max(0, item.rate) : 0;
+  const safeInvoice = normalizeInvoice(invoice);
+  const items = safeInvoice?.items ?? [];
+  const lines = items.map((item) => {
+    const qty = Math.max(0, item.qty);
+    const rate = Math.max(0, item.rate);
     return {
       description: item.description,
       hsn: item.hsn,
       qty,
       rate,
-      gstPercent: Number.isFinite(item.gstPercent) ? Math.max(0, item.gstPercent) : 0,
-      taxable: roundMoney(qty * rate),
+      gstPercent: Math.max(0, item.gstPercent),
+      taxable: qty * rate,
       gst: 0,
       cgst: 0,
       sgst: 0,
@@ -112,32 +190,28 @@ export function calculateInvoice(invoice: Invoice): CalculatedInvoice {
       total: 0,
     };
   });
-  const subtotal = roundMoney(lines.reduce((sum, line) => sum + line.taxable, 0));
-  const discount = roundMoney(Math.min(subtotal, Math.max(0, Number(invoice.discount) || 0)));
-  const netTaxable = roundMoney(subtotal - discount);
+  const subtotal = lines.reduce((sum, line) => sum + line.taxable, 0);
+  const discount = Math.min(Math.max(0, safeInvoice?.discount ?? 0), subtotal);
+  const netTaxable = Math.max(0, subtotal - discount);
   const ratio = subtotal > 0 ? netTaxable / subtotal : 0;
 
-  lines.forEach((line, index) => {
-    line.taxable = roundMoney(line.taxable * ratio);
-    if (index === lines.length - 1 && lines.length > 0) {
-      const allocated = roundMoney(lines.reduce((sum, current) => sum + current.taxable, 0));
-      line.taxable = roundMoney(line.taxable + netTaxable - allocated);
-    }
-    line.gst = roundMoney((line.taxable * line.gstPercent) / 100);
-    if (invoice.invoice.supplyType === "INTRA") {
-      line.cgst = roundMoney(line.gst / 2);
-      line.sgst = roundMoney(line.gst - line.cgst);
+  lines.forEach((line) => {
+    const taxableShare = line.taxable * ratio;
+    line.gst = (taxableShare * line.gstPercent) / 100;
+    if (safeInvoice?.invoice.supplyType === "INTRA") {
+      line.cgst = line.gst / 2;
+      line.sgst = line.gst / 2;
     } else {
       line.igst = line.gst;
     }
-    line.total = roundMoney(line.taxable + line.gst);
+    line.total = taxableShare + line.gst;
   });
 
-  const cgst = roundMoney(lines.reduce((sum, line) => sum + line.cgst, 0));
-  const sgst = roundMoney(lines.reduce((sum, line) => sum + line.sgst, 0));
-  const igst = roundMoney(lines.reduce((sum, line) => sum + line.igst, 0));
-  const totalGst = roundMoney(cgst + sgst + igst);
-  const grand = roundMoney(netTaxable + totalGst);
+  const cgst = lines.reduce((sum, line) => sum + line.cgst, 0);
+  const sgst = lines.reduce((sum, line) => sum + line.sgst, 0);
+  const igst = lines.reduce((sum, line) => sum + line.igst, 0);
+  const totalGst = lines.reduce((sum, line) => sum + line.gst, 0);
+  const grand = netTaxable + totalGst;
   const finalTotal = Math.round(grand);
 
   return {
@@ -150,7 +224,8 @@ export function calculateInvoice(invoice: Invoice): CalculatedInvoice {
     igst,
     totalGst,
     grand,
-    roundOff: roundMoney(finalTotal - grand),
+    roundOff: finalTotal - grand,
     finalTotal,
   };
 }
+

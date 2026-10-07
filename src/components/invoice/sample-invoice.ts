@@ -3,7 +3,7 @@ import type { Invoice } from "./invoice.types";
 export const SAMPLE_INVOICE: Invoice = {
   seller: {
     name: "OBOSCO CLOTHING INDUSTRIES",
-    logoUrl: "/focus%20lady%20logo.png",
+    logoUrl: "/focus-lady-logo.png",
     addressLines: [
       "Near Police Station Tanur, First Floor 22/242",
       "Tanur, Malappuram, Kerala - 676302",
@@ -45,15 +45,15 @@ export const SAMPLE_INVOICE: Invoice = {
       rate: 249,
       gstPercent: 5,
     },
+    {
+      description: "Focus Lady Sports Bra - Grey, 32B",
+      hsn: "6212",
+      qty: 3,
+      rate: 349,
+      gstPercent: 5,
+    },
   ],
   discount: 50,
-  bank: {
-    accountName: "OBOSCO CLOTHING INDUSTRIES",
-    bankName: "",
-    accountNo: "",
-    ifsc: "",
-    upi: "",
-  },
   terms: [
     "We declare that this invoice shows the actual price of the goods described and that all particulars are true and correct.",
     "Goods once sold will not be taken back or exchanged except for manufacturing defects, within 7 days with this invoice.",

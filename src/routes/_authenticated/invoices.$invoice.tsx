@@ -1,12 +1,16 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { queryOptions, useSuspenseQuery } from "@tanstack/react-query";
-import { Suspense } from "react";
+import { Suspense, useEffect, useState } from "react";
 import { ErpShell } from "@/components/ErpShell";
+import { Button } from "@/components/ui/button";
 import { getSheetsBatch } from "@/lib/sheets.functions";
 import { normalizeDate, toNum } from "@/lib/erp-data";
 import { InvoicePreviewPage } from "@/components/invoice/InvoicePreviewPage";
+import { InvoicePreviewModal } from "@/components/invoice/InvoicePreviewModal";
 import { SAMPLE_INVOICE } from "@/components/invoice/sample-invoice";
 import type { Invoice } from "@/components/invoice/invoice.types";
+
+const sheetText = (value: unknown) => String(value ?? "").trim();
 
 const invoiceQuery = (invoice: string) =>
   queryOptions({
@@ -26,6 +30,9 @@ const invoiceQuery = (invoice: string) =>
   });
 
 export const Route = createFileRoute("/_authenticated/invoices/$invoice")({
+  validateSearch: (search: Record<string, unknown>) => ({
+    ...(search.preview === true || search.preview === "1" ? { preview: true } : {}),
+  }),
   head: ({ params }) => ({
     meta: [
       { title: `Invoice ${params.invoice} — Focus Lady Bra ERP` },
@@ -49,51 +56,54 @@ export const Route = createFileRoute("/_authenticated/invoices/$invoice")({
 
 function InvoicePage() {
   const { invoice } = Route.useParams();
+  const { preview } = Route.useSearch();
   return (
     <ErpShell activeSlug="invoices" title={`Invoice ${invoice}`} subtitle="Tax invoice">
       <Suspense fallback={<div className="text-sm text-muted-foreground">Loading…</div>}>
-        <InvoiceView invoice={invoice} />
+        <InvoiceView invoice={invoice} initialPreview={preview ?? false} />
       </Suspense>
     </ErpShell>
   );
 }
 
-function InvoiceView({ invoice }: { invoice: string }) {
+function InvoiceView({ invoice, initialPreview }: { invoice: string; initialPreview: boolean }) {
   const { data } = useSuspenseQuery(invoiceQuery(invoice));
+  const [previewOpen, setPreviewOpen] = useState(initialPreview);
+  useEffect(() => setPreviewOpen(initialPreview), [initialPreview]);
   const get = (needle: string) =>
     data.valueRanges.find((v) => v.range.includes(needle))?.values ?? [];
 
-  const head = get("Sales").find((row) => (row[0] ?? "") === invoice);
+  const head = get("Sales").find((row) => sheetText(row[0]) === invoice);
 
   if (!head) {
     return (
-      <>
-        <p className="mb-3 text-sm text-muted-foreground">
-          Invoice {invoice} was not found. Showing the sample invoice preview.
-        </p>
-        <InvoicePreviewPage
-          invoice={SAMPLE_INVOICE}
-          sampleNotice="Demo sample; this is not a saved invoice."
+      <div>
+        <p className="mb-3 text-sm text-muted-foreground">Invoice {invoice} was not found.</p>
+        <Button variant="outline" onClick={() => setPreviewOpen(true)}>
+          Preview / Print
+        </Button>
+        <InvoicePreviewModal
+          open={previewOpen}
+          invoice={null}
+          error={`Invoice ${invoice} was not found in the sales sheet.`}
+          onClose={() => setPreviewOpen(false)}
         />
-      </>
+      </div>
     );
   }
 
-  const customerName = String(head[2] ?? "").trim() || "Customer";
+  const customerName = sheetText(head[2]) || "Walk-in Customer";
   const customerRow = get("Customers").find(
-    (row) =>
-      String(row[1] ?? "")
-        .trim()
-        .toLowerCase() === customerName.toLowerCase(),
+    (row) => sheetText(row[1]).toLowerCase() === customerName.toLowerCase(),
   );
-  const sheetItems = get("Sale Items").filter((row) => (row[0] ?? "") === invoice);
+  const sheetItems = get("Sale Items").filter((row) => sheetText(row[0]) === invoice);
   const items = sheetItems.map((row) => {
-    const size = String(row[11] ?? "").trim();
-    const color = String(row[12] ?? "").trim();
+    const size = sheetText(row[11]);
+    const color = sheetText(row[12]);
     const options = [color, size].filter(Boolean).join(", ");
     return {
-      description: `${String(row[3] ?? "")}${options ? ` - ${options}` : ""}`,
-      hsn: String(row[4] ?? ""),
+      description: `${sheetText(row[3])}${options ? ` - ${options}` : ""}`,
+      hsn: sheetText(row[4]),
       qty: toNum(row[5]),
       rate: toNum(row[6]),
       gstPercent: toNum(row[8]),
@@ -101,25 +111,23 @@ function InvoiceView({ invoice }: { invoice: string }) {
   });
   const grossSubtotal = items.reduce((sum, item) => sum + item.qty * item.rate, 0);
   const discount = Math.max(0, grossSubtotal - toNum(head[3]));
-  const customerGstin = String(head[12] ?? customerRow?.[6] ?? "").trim();
-  const customerState = String(customerRow?.[5] ?? "Kerala").trim() || "Kerala";
+  const customerGstin = sheetText(head[12]) || sheetText(customerRow?.[6]);
+  const customerState = sheetText(customerRow?.[5]) || "Kerala";
   const stateCode =
     customerGstin.slice(0, 2) || (customerState.toLowerCase() === "kerala" ? "32" : "");
   const collectionModes = [
     ...new Set(
       get("Daily Collection")
         .filter((row) => (row[2] ?? "") === invoice)
-        .map((row) => String(row[4] ?? "").trim())
+        .map((row) => sheetText(row[4]))
         .filter(Boolean),
     ),
   ];
-  const storedMode = String(head[13] ?? "gst")
-    .trim()
-    .toLowerCase();
+  const storedMode = (sheetText(head[13]) || "gst").toLowerCase();
   const address =
-    String(head[14] ?? "").trim() ||
+    sheetText(head[14]) ||
     [customerRow?.[3], customerRow?.[4], customerRow?.[5]]
-      .map((part) => String(part ?? "").trim())
+      .map(sheetText)
       .filter(Boolean)
       .join(", ");
   const invoiceData: Invoice = {
@@ -139,12 +147,21 @@ function InvoiceView({ invoice }: { invoice: string }) {
     customer: {
       name: customerName,
       address: address || "—",
-      phone: String(customerRow?.[2] ?? "").trim() || "—",
+      phone: sheetText(customerRow?.[2]),
       gstin: customerGstin,
     },
     items,
     discount,
   };
 
-  return <InvoicePreviewPage invoice={invoiceData} />;
+  return (
+    <>
+      <InvoicePreviewPage invoice={invoiceData} onPreview={() => setPreviewOpen(true)} />
+      <InvoicePreviewModal
+        open={previewOpen}
+        invoice={invoiceData}
+        onClose={() => setPreviewOpen(false)}
+      />
+    </>
+  );
 }

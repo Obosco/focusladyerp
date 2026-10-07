@@ -1,34 +1,76 @@
 import type { Invoice } from "./invoice.types";
-import { amountInWords, calculateInvoice, formatINR } from "./invoice.utils";
+import {
+  amountInWords,
+  calculateInvoice,
+  dateFormat,
+  formatINR,
+  normalizeInvoice,
+} from "./invoice.utils";
 
-function formatInvoiceDate(value: string) {
-  const date = new Date(`${value.slice(0, 10)}T00:00:00`);
-  if (Number.isNaN(date.getTime())) return value;
-  const parts = new Intl.DateTimeFormat("en-GB", {
-    day: "2-digit",
-    month: "short",
-    year: "numeric",
-  }).formatToParts(date);
-  const part = (type: string) => parts.find((entry) => entry.type === type)?.value ?? "";
-  return `${part("day")}-${part("month")}-${part("year")}`;
-}
+const ITEMS_PER_PAGE = 10;
+const MINIMUM_ROWS = 7;
 
-function detail(label: string, value: string) {
+function detail(label: string, value: string, emphasized = false) {
   return (
     <div className="gst-invoice-detail">
       <span className="gst-invoice-detail-label">{label}</span>
-      <span className="gst-invoice-detail-value">{value || "—"}</span>
+      <span className={`gst-invoice-detail-value${emphasized ? " gst-bold" : ""}`}>
+        {value || "—"}
+      </span>
     </div>
   );
 }
 
-export function InvoiceTemplate({ invoice }: { invoice: Invoice }) {
+export function InvoiceTemplate({ invoice: input }: { invoice: Invoice }) {
+  const invoice = normalizeInvoice(input);
+  if (!invoice) return <div className="invoice-preview-error">Invoice data is unavailable.</div>;
+
   const totals = calculateInvoice(invoice);
-  const hasItems = invoice.items.length > 0 && totals.finalTotal > 0;
-  const blankRows = Math.max(0, 8 - (hasItems ? totals.lines.length : 1));
+  const pages: (typeof totals.lines)[] = [];
+  const sourceLines = totals.lines.length ? totals.lines : [];
+  for (let index = 0; index < sourceLines.length; index += ITEMS_PER_PAGE) {
+    pages.push(sourceLines.slice(index, index + ITEMS_PER_PAGE));
+  }
+  if (!pages.length) pages.push([]);
 
   return (
-    <article className="invoice-root" aria-label={`Tax invoice ${invoice.invoice.number}`}>
+    <>
+      {pages.map((lines, pageIndex) => (
+        <InvoiceSheet
+          key={pageIndex}
+          invoice={invoice}
+          lines={lines}
+          totals={totals}
+          page={pageIndex + 1}
+          pageCount={pages.length}
+        />
+      ))}
+    </>
+  );
+}
+
+function InvoiceSheet({
+  invoice,
+  lines,
+  totals,
+  page,
+  pageCount,
+}: {
+  invoice: Invoice;
+  lines: ReturnType<typeof calculateInvoice>["lines"];
+  totals: ReturnType<typeof calculateInvoice>;
+  page: number;
+  pageCount: number;
+}) {
+  const isFinalPage = page === pageCount;
+  const columnCount = invoice.invoice.supplyType === "INTRA" ? 10 : 9;
+  const blankRows = isFinalPage ? Math.max(0, MINIMUM_ROWS - lines.length) : 0;
+
+  return (
+    <article
+      className="invoice-sheet invoice-root"
+      aria-label={`Tax invoice ${invoice.invoice.number}, page ${page} of ${pageCount}`}
+    >
       <header className="gst-invoice-header">
         <div className="gst-invoice-logo-wrap">
           <img className="gst-invoice-logo" src={invoice.seller.logoUrl} alt="Focus Lady" />
@@ -36,8 +78,8 @@ export function InvoiceTemplate({ invoice }: { invoice: Invoice }) {
         <div className="gst-invoice-seller">
           <h1>{invoice.seller.name}</h1>
           <p>
-            {invoice.seller.addressLines.map((line) => (
-              <span key={line}>
+            {invoice.seller.addressLines.map((line, index) => (
+              <span key={`${line}-${index}`}>
                 {line}
                 <br />
               </span>
@@ -66,8 +108,8 @@ export function InvoiceTemplate({ invoice }: { invoice: Invoice }) {
         <div className="gst-invoice-panel">
           <h3>Invoice Details</h3>
           <div className="gst-invoice-panel-body">
-            {detail("Invoice No", invoice.invoice.number)}
-            {detail("Invoice Date", formatInvoiceDate(invoice.invoice.date))}
+            {detail("Invoice No", invoice.invoice.number, true)}
+            {detail("Invoice Date", dateFormat(invoice.invoice.date))}
             {detail("Place of Supply", invoice.invoice.placeOfSupply)}
             {detail("Payment Mode", invoice.invoice.paymentMode)}
           </div>
@@ -75,10 +117,10 @@ export function InvoiceTemplate({ invoice }: { invoice: Invoice }) {
         <div className="gst-invoice-panel">
           <h3>Billing Details</h3>
           <div className="gst-invoice-panel-body">
-            {detail("Bill To (M/S)", invoice.customer.name)}
+            {detail("Bill To (M/S)", invoice.customer.name, true)}
             {detail("Address", invoice.customer.address)}
             {detail("Phone", invoice.customer.phone)}
-            {detail("GSTIN", invoice.customer.gstin.trim() || "N/A (Unregistered)")}
+            {detail("GSTIN", invoice.customer.gstin)}
           </div>
         </div>
       </section>
@@ -107,16 +149,17 @@ export function InvoiceTemplate({ invoice }: { invoice: Invoice }) {
           </tr>
         </thead>
         <tbody>
-          {hasItems ? (
-            totals.lines.map((line, index) => (
-              <tr key={`${line.description}-${index}`}>
-                <td className="gst-center">{index + 1}</td>
+          {lines.map((line, index) => {
+            const itemNumber = (page - 1) * ITEMS_PER_PAGE + index + 1;
+            return (
+              <tr key={`${line.description}-${itemNumber}`}>
+                <td className="gst-center">{itemNumber}</td>
                 <td>{line.description}</td>
                 <td className="gst-center">{line.hsn || "—"}</td>
-                <td className="gst-center">{line.qty}</td>
+                <td className="gst-center">{formatINR(line.qty).replace(/\.00$/, "")}</td>
                 <td className="gst-number">{formatINR(line.rate)}</td>
                 <td className="gst-number">{formatINR(line.taxable)}</td>
-                <td className="gst-center">{line.gstPercent}%</td>
+                <td className="gst-center">{formatINR(line.gstPercent).replace(/\.00$/, "")}%</td>
                 {invoice.invoice.supplyType === "INTRA" ? (
                   <>
                     <td className="gst-number">{formatINR(line.cgst)}</td>
@@ -127,104 +170,93 @@ export function InvoiceTemplate({ invoice }: { invoice: Invoice }) {
                 )}
                 <td className="gst-number gst-bold">{formatINR(line.total)}</td>
               </tr>
-            ))
-          ) : (
-            <tr className="gst-empty-row">
-              <td colSpan={invoice.invoice.supplyType === "INTRA" ? 10 : 9}>No items</td>
-            </tr>
-          )}
+            );
+          })}
           {Array.from({ length: blankRows }, (_, index) => (
-            <tr className="gst-blank-row" key={`blank-${index}`} aria-hidden="true">
-              <td colSpan={invoice.invoice.supplyType === "INTRA" ? 10 : 9} />
+            <tr className="gst-blank-row" key={`blank-${page}-${index}`} aria-hidden="true">
+              {Array.from({ length: columnCount }, (_, cellIndex) => (
+                <td key={cellIndex} />
+              ))}
             </tr>
           ))}
         </tbody>
       </table>
 
-      <section className="gst-invoice-summary">
-        <div className="gst-invoice-left-summary">
-          <div className="gst-invoice-words-box">
-            <h3>Amount in Words</h3>
-            <p>{amountInWords(totals.finalTotal)}</p>
-          </div>
-          <div className="gst-invoice-bank-box">
-            <h3>Payment / Bank Details</h3>
-            <p>
-              <span>Account Name:</span> {invoice.bank.accountName || "—"}
-            </p>
-            <p>
-              <span>Bank:</span> {invoice.bank.bankName || "____________"}
-              <span className="gst-invoice-separator"> | </span>
-              <span>A/C No:</span> {invoice.bank.accountNo || "____________"}
-            </p>
-            <p>
-              <span>IFSC:</span> {invoice.bank.ifsc || "____________"}
-              <span className="gst-invoice-separator"> | </span>
-              <span>UPI:</span> {invoice.bank.upi || "____________"}
-            </p>
-          </div>
-        </div>
-        <div className="gst-invoice-totals">
-          <div className="gst-total-row">
-            <span>Subtotal (Taxable Value)</span>
-            <span>{formatINR(totals.subtotal)}</span>
-          </div>
-          <div className="gst-total-row">
-            <span>Less: Discount</span>
-            <span>- {formatINR(totals.discount)}</span>
-          </div>
-          <div className="gst-total-row">
-            <span>Net Taxable Value</span>
-            <span>{formatINR(totals.netTaxable)}</span>
-          </div>
-          {invoice.invoice.supplyType === "INTRA" ? (
-            <>
-              <div className="gst-total-row">
-                <span>CGST</span>
-                <span>{formatINR(totals.cgst)}</span>
-              </div>
-              <div className="gst-total-row">
-                <span>SGST</span>
-                <span>{formatINR(totals.sgst)}</span>
-              </div>
-            </>
-          ) : (
-            <div className="gst-total-row">
-              <span>IGST</span>
-              <span>{formatINR(totals.igst)}</span>
+      {isFinalPage ? (
+        <>
+          <section className="gst-invoice-summary">
+            <div className="gst-invoice-words-box">
+              <h3>Amount in Words</h3>
+              <p>{amountInWords(totals.finalTotal)}</p>
             </div>
-          )}
-          <div className="gst-total-row">
-            <span>Round Off</span>
-            <span>{formatINR(totals.roundOff)}</span>
-          </div>
-          <div className="gst-total-grand">
-            <span>Grand Total</span>
-            <strong>Rs. {formatINR(totals.finalTotal).replace(/^₹\s?/, "")}</strong>
-          </div>
-        </div>
-      </section>
+            <div className="gst-invoice-totals">
+              <div className="gst-total-row">
+                <span>Subtotal (Taxable Value)</span>
+                <span>{formatINR(totals.subtotal)}</span>
+              </div>
+              <div className="gst-total-row">
+                <span>Less: Discount</span>
+                <span>- {formatINR(totals.discount)}</span>
+              </div>
+              <div className="gst-total-row">
+                <span>Net Taxable Value</span>
+                <span>{formatINR(totals.netTaxable)}</span>
+              </div>
+              {invoice.invoice.supplyType === "INTRA" ? (
+                <>
+                  <div className="gst-total-row">
+                    <span>CGST</span>
+                    <span>{formatINR(totals.cgst)}</span>
+                  </div>
+                  <div className="gst-total-row">
+                    <span>SGST</span>
+                    <span>{formatINR(totals.sgst)}</span>
+                  </div>
+                </>
+              ) : (
+                <div className="gst-total-row">
+                  <span>IGST</span>
+                  <span>{formatINR(totals.igst)}</span>
+                </div>
+              )}
+              <div className="gst-total-row">
+                <span>Round Off</span>
+                <span>
+                  {totals.roundOff > 0 ? "+" : ""}
+                  {formatINR(totals.roundOff)}
+                </span>
+              </div>
+              <div className="gst-total-grand">
+                <span>Grand Total</span>
+                <strong>Rs. {formatINR(totals.finalTotal)}</strong>
+              </div>
+            </div>
+          </section>
 
-      <section className="gst-invoice-bottom">
-        <div className="gst-invoice-terms">
-          <h3>Terms &amp; Conditions</h3>
-          <ol>
-            {invoice.terms.map((term, index) => (
-              <li key={`${index}-${term}`}>{term}</li>
-            ))}
-          </ol>
-        </div>
-        <div className="gst-invoice-signature">
-          <strong>For {invoice.seller.name}</strong>
-          <div className="gst-signature-space" />
-          <div className="gst-signature-line" />
-          <span>Authorised Signatory</span>
-        </div>
-      </section>
+          <section className="gst-invoice-bottom">
+            <div className="gst-invoice-terms">
+              <h3>Terms &amp; Conditions</h3>
+              <ol>
+                {invoice.terms.map((term, index) => (
+                  <li key={`${index}-${term}`}>{term}</li>
+                ))}
+              </ol>
+            </div>
+            <div className="gst-invoice-signature">
+              <strong>For {invoice.seller.name}</strong>
+              <div className="gst-signature-space" />
+              <div className="gst-signature-line" />
+              <span>Authorised Signatory</span>
+            </div>
+          </section>
+        </>
+      ) : null}
 
       <footer className="gst-invoice-footer">
         <span>{invoice.footerNote}</span>
-        <span>Page 1 of 1</span>
+        <span>
+          Page {page} of {pageCount}
+        </span>
       </footer>
     </article>
   );

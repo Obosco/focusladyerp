@@ -37,21 +37,12 @@ export type InvoiceItem = {
   gstPercent: number;
 };
 
-export type InvoiceBankDetails = {
-  accountName: string;
-  bankName: string;
-  accountNo: string;
-  ifsc: string;
-  upi: string;
-};
-
 export type Invoice = {
   seller: InvoiceSeller;
   invoice: InvoiceHeader;
   customer: InvoiceCustomer;
   items: InvoiceItem[];
   discount: number;
-  bank: InvoiceBankDetails;
   terms: string[];
   footerNote: string;
 };
