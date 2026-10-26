@@ -98,12 +98,13 @@ function assertAllowedRange(range: string) {
 const DEFAULT_SHEET_HEADERS: Record<string, string[]> = {
   Dashboard: ["Metric", "Value", "Updated At"],
   Company: ["Company Name", "Phone", "Email", "Address", "GSTIN", "Notes"],
-  Products: ["ID", "Name", "Category", "Brand", "Description", "Unit", "Barcode", "Stock", "Cost", "Price", "Minimum Stock", "Status"],
+  Products: ["ID", "Name", "Category", "Brand", "Description", "Unit", "Barcode", "Stock", "Cost", "Price", "Minimum Stock", "Status", "SKU", "MRP", "GST %", "Subcategory", "Supplier"],
   "Product Variants": ["Variant ID", "Product ID", "Variant Name", "SKU", "Barcode", "Barcode Type", "Size", "Color", "Design", "Purchase Price", "Selling Price", "Current Stock", "Minimum Stock", "Unit", "Status", "Created At", "Updated At"],
   Stock: ["Product", "Barcode", "Quantity", "Purchase", "Size", "Color"],
   "Stock Movements": ["Movement ID", "Date", "Product ID", "Variant ID", "Product", "SKU", "Size", "Color", "Type", "Quantity", "Before Stock", "After Stock", "Reference Type", "Reference ID", "Supplier", "Batch Number", "Location", "Unit Cost", "Notes", "User"],
   Customers: ["ID", "Name", "Phone", "Address", "City", "State", "GSTIN", "Type", "Open Balance", "Paid", "Due", "Notes", "Active", "Created At", "Date", "Last Paid", "Customer Count", "Sales Value", "Total Due"],
-  Suppliers: ["ID", "Name", "Phone", "Address", "City", "State", "GSTIN", "Category", "Notes"],
+  Suppliers: ["ID", "Name", "Phone", "Address", "City", "State", "GSTIN", "Category", "Notes", "WhatsApp", "Email"],
+  Categories: ["Category ID", "Category Name", "Created At"],
   Sales: ["Invoice", "Date", "Customer", "Subtotal", "GST", "Total", "Paid", "Due", "Status", "Notes", "Vehicle No", "Salesman", "GSTIN", "Mode", "Address", "Valid Until", "Customer ID"],
   Purchases: ["Invoice", "Date", "Supplier", "Subtotal", "GST", "Total", "Paid", "Due", "Status", "Notes"],
   "Daily Collection": ["Date", "Customer", "Invoice", "Amount", "Mode"],
@@ -544,13 +545,17 @@ export async function writeSettings(s: ErpSettings) {
 export type ProductInput = {
   name: string;
   category?: string;
+  subcategory?: string;
   brand?: string;
   description?: string;
+  sku?: string;
   unit?: string;
   barcode?: string;
   barcodeType?: string;
   cost?: number;
   price?: number;
+  mrp?: number;
+  supplier?: string;
   size?: string;
   color?: string;
   minimumStock?: number;
@@ -589,6 +594,7 @@ export type InventorySnapshot = {
   variants: SheetValues;
   movements: SheetValues;
   suppliers: SheetValues;
+  categories: SheetValues;
 };
 
 const STOCK_MOVEMENT_TYPES: StockMovementType[] = [
@@ -605,13 +611,14 @@ const STOCK_MOVEMENT_TYPES: StockMovementType[] = [
 
 export async function getInventorySnapshot(): Promise<InventorySnapshot> {
   await ensureSheet("Stock Movements", DEFAULT_SHEET_HEADERS["Stock Movements"]);
-  const [products, variants, movements, suppliers] = await readRanges([
-    "Products!A2:L5000",
+  const [products, variants, movements, suppliers, categories] = await readRanges([
+    "Products!A2:Q5000",
     "'Product Variants'!A2:Q10000",
     "'Stock Movements'!A2:T50000",
-    "Suppliers!A2:I5000",
+    "Suppliers!A2:K5000",
+    "Categories!A2:C1000",
   ]);
-  return { products, variants, movements, suppliers };
+  return { products, variants, movements, suppliers, categories };
 }
 
 function inventoryBalance(
@@ -828,6 +835,19 @@ async function checkDuplicateBarcode(barcode: string, skipId?: string) {
   });
 }
 
+async function checkDuplicateSku(sku: string) {
+  const clean = sku.trim().toLowerCase();
+  if (!clean) return false;
+  const [productRows, variantRows] = await readRanges([
+    "Products!A2:Q5000",
+    "'Product Variants'!A2:Q10000",
+  ]);
+  return (
+    productRows.some((row) => String(row[12] ?? "").trim().toLowerCase() === clean) ||
+    variantRows.some((row) => String(row[3] ?? "").trim().toLowerCase() === clean)
+  );
+}
+
 export async function createProduct(p: ProductInput, user = "Authenticated user") {
   await ensureSheet("Products", DEFAULT_SHEET_HEADERS.Products);
   await ensureSheet("Product Variants", DEFAULT_SHEET_HEADERS["Product Variants"]);
@@ -835,11 +855,37 @@ export async function createProduct(p: ProductInput, user = "Authenticated user"
   await ensureSheet("Barcode Database", DEFAULT_SHEET_HEADERS["Barcode Database"]);
 
   const productBarcode = normalizeBarcode(p.barcode);
+  const productSku = String(p.sku ?? "").trim();
+  if (productSku && (await checkDuplicateSku(productSku))) {
+    throw new Error(`A product with SKU "${productSku}" already exists.`);
+  }
   if (productBarcode && !isValidBarcode(productBarcode, p.barcodeType)) {
     throw new Error("Barcode format is invalid for the selected barcode type.");
   }
   if (productBarcode && (await checkDuplicateBarcode(productBarcode))) {
     throw new Error("Barcode already exists for another product/variant.");
+  }
+  const variants = (p.variants ?? []).filter((variant) => variant.variantName || variant.sku || variant.barcode || variant.size || variant.color);
+  const candidateSkus = variants.map((variant) => String(variant.sku ?? "").trim()).filter(Boolean);
+  if (new Set(candidateSkus.map((sku) => sku.toLowerCase())).size !== candidateSkus.length) {
+    throw new Error("Each product variant must have a unique SKU.");
+  }
+  for (const sku of candidateSkus) {
+    if (sku.toLowerCase() === productSku.toLowerCase() || (await checkDuplicateSku(sku))) {
+      throw new Error(`A product with SKU "${sku}" already exists.`);
+    }
+  }
+  for (const variant of variants) {
+    const variantBarcode = normalizeBarcode(variant.barcode);
+    if (variantBarcode && !isValidBarcode(variantBarcode, variant.barcodeType)) {
+      throw new Error(`Variant barcode for ${variant.variantName || "variant"} is invalid.`);
+    }
+    if (
+      variantBarcode &&
+      (variantBarcode === productBarcode || (await checkDuplicateBarcode(variantBarcode)))
+    ) {
+      throw new Error("Barcode already exists for another product/variant.");
+    }
   }
 
   const rows = await readRange("Products!A2:A2000");
@@ -858,28 +904,29 @@ export async function createProduct(p: ProductInput, user = "Authenticated user"
       String(p.price ?? 0),
       String(p.minimumStock ?? 0),
       p.status ?? "Active",
+      productSku,
+      String(p.mrp ?? 0),
+      String(p.gstPercent ?? 0),
+      p.subcategory ?? "",
+      p.supplier ?? "",
     ],
   ]);
 
-  const variants = (p.variants ?? []).filter((variant) => variant.variantName || variant.sku || variant.barcode || variant.size || variant.color);
   const openingMovements: SheetValues = [];
+  const variantIds: string[] = [];
   for (const variant of variants) {
+    const variantSku = String(variant.sku ?? "").trim();
     const variantBarcode = normalizeBarcode(variant.barcode);
-    if (variantBarcode && !isValidBarcode(variantBarcode, variant.barcodeType)) {
-      throw new Error(`Variant barcode for ${variant.variantName || "variant"} is invalid.`);
-    }
-    if (variantBarcode && (await checkDuplicateBarcode(variantBarcode))) {
-      throw new Error("Barcode already exists for another product/variant.");
-    }
 
     const variantRows = await readRange("Product Variants!A2:A2000");
     const variantId = `V-${String(variantRows.filter((r) => (r[0] ?? "").trim()).length + 1).padStart(4, "0")}`;
+    variantIds.push(variantId);
     const createdAt = new Date().toISOString();
     await appendRows("Product Variants!A:Q", [[
       variantId,
       id,
       variant.variantName ?? "",
-      variant.sku ?? "",
+      variantSku,
       variantBarcode,
       variant.barcodeType ?? p.barcodeType ?? "CODE128",
       variant.size ?? p.size ?? "",
@@ -971,7 +1018,7 @@ export async function createProduct(p: ProductInput, user = "Authenticated user"
     ]]);
   }
 
-  return { id, ...p };
+  return { id, variantIds, ...p };
 }
 
 export type CustomerInput = {
@@ -1057,6 +1104,8 @@ export async function createCustomer(c: CustomerInput) {
 export type SupplierInput = {
   name: string;
   phone?: string;
+  whatsapp?: string;
+  email?: string;
   address?: string;
   city?: string;
   state?: string;
@@ -1067,7 +1116,7 @@ export type SupplierInput = {
 
 export async function createSupplier(input: SupplierInput) {
   await ensureSheet("Suppliers", DEFAULT_SHEET_HEADERS.Suppliers);
-  const rows = await readRange("Suppliers!A2:I5000");
+  const rows = await readRange("Suppliers!A2:K5000");
   const name = input.name.trim().replace(/\s+/g, " ");
   if (
     rows.some(
@@ -1077,7 +1126,7 @@ export async function createSupplier(input: SupplierInput) {
     throw new Error(`Supplier "${name}" already exists.`);
   }
   const id = `SUP-${String(rows.filter((row) => (row[0] ?? "").trim()).length + 1).padStart(4, "0")}`;
-  await appendRows("Suppliers!A:I", [[
+  await appendRows("Suppliers!A:K", [[
     id,
     name,
     input.phone ?? "",
@@ -1087,8 +1136,26 @@ export async function createSupplier(input: SupplierInput) {
     input.gstin ?? "",
     input.category ?? "",
     input.notes ?? "",
+    input.whatsapp ?? "",
+    input.email ?? "",
   ]]);
   return { id, name };
+}
+
+export async function createCategory(name: string) {
+  await ensureSheet("Categories", DEFAULT_SHEET_HEADERS.Categories);
+  const rows = await readRange("Categories!A2:C1000");
+  const normalized = name.trim().replace(/\s+/g, " ");
+  if (!normalized) throw new Error("Category name is required.");
+  const existing = rows.find(
+    (row) => String(row[1] ?? "").trim().toLowerCase() === normalized.toLowerCase(),
+  );
+  if (existing) {
+    throw new Error(`Category "${String(existing[1])}" already exists.`);
+  }
+  const id = `CAT-${String(rows.filter((row) => (row[0] ?? "").trim()).length + 1).padStart(4, "0")}`;
+  await appendRows("Categories!A:C", [[id, normalized, new Date().toISOString()]]);
+  return { id, name: normalized };
 }
 
 export type DealerInput = CustomerInput;

@@ -19,6 +19,7 @@ import {
   getInventorySnapshot,
   addInventoryStock,
   adjustInventoryStock,
+  createCategory,
   type InvoiceInput,
   type ErpSettings,
   type ProductInput,
@@ -215,6 +216,14 @@ export const addSupplier = createServerFn({ method: "POST" })
     return data;
   })
   .handler(async ({ data }) => createSupplier(data));
+
+export const addCategory = createServerFn({ method: "POST" })
+  .middleware([requireAuth])
+  .validator((data: { name: string }) => {
+    requiredText(data?.name, "Category name", 120);
+    return data;
+  })
+  .handler(async ({ data }) => createCategory(data.name));
 
 export const createReturn = createServerFn({ method: "POST" })
   .middleware([requireAuth])

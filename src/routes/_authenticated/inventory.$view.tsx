@@ -7,7 +7,9 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { addStock, adjustStock, getInventoryData } from "@/lib/sheets.functions";
+import { ProductQuickCreateDialog, type CreatedProduct } from "@/components/ProductQuickCreateDialog";
+import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { addStock, addSupplier, adjustStock, getInventoryData } from "@/lib/sheets.functions";
 import { toast } from "sonner";
 
 const inventoryQuery = queryOptions({
@@ -140,6 +142,7 @@ function InventoryPage() {
             products={products}
             variants={variants}
             suppliers={data.suppliers}
+            categories={data.categories.map((row) => row[1]).filter(Boolean)}
             rows={stockRows}
           />
         )}
@@ -418,18 +421,27 @@ function StockForm({
   products,
   variants,
   suppliers,
+  categories,
   rows,
 }: {
   products: string[][];
   variants: string[][];
   suppliers: string[][];
+  categories: string[];
   rows: StockRow[];
 }) {
   const [productId, setProductId] = useState("");
   const [variantId, setVariantId] = useState("");
+  const [productSearch, setProductSearch] = useState("");
+  const [productPickerOpen, setProductPickerOpen] = useState(false);
+  const [createProductOpen, setCreateProductOpen] = useState(false);
+  const [newProducts, setNewProducts] = useState<string[][]>([]);
+  const [newVariants, setNewVariants] = useState<string[][]>([]);
   const [quantity, setQuantity] = useState("1");
   const [purchasePrice, setPurchasePrice] = useState("0");
   const [supplier, setSupplier] = useState("");
+  const [localSuppliers, setLocalSuppliers] = useState(suppliers);
+  const [createSupplierOpen, setCreateSupplierOpen] = useState(false);
   const [batchNumber, setBatchNumber] = useState("");
   const [location, setLocation] = useState("Main Store");
   const [date, setDate] = useState(new Date().toISOString().slice(0, 10));
@@ -442,9 +454,93 @@ function StockForm({
   } | null>(null);
   const queryClient = useQueryClient();
   const save = useServerFn(addStock);
-  const productVariants = variants.filter((row) => row[1] === productId);
+  const saveSupplier = useServerFn(addSupplier);
+  const allProducts = [...products, ...newProducts];
+  const allVariants = [...variants, ...newVariants];
+  const productVariants = allVariants.filter((row) => row[1] === productId);
   const selected = rows.find((row) => row.productId === productId && row.variantId === variantId);
-  const selectedProduct = products.find((row) => row[0] === productId);
+  const selectedProduct = allProducts.find((row) => row[0] === productId);
+  const searchTerm = productSearch.trim().toLowerCase();
+  const searchResults: Array<{ product: string[]; variant?: string[] }> = allProducts.flatMap(
+    (product): Array<{ product: string[]; variant?: string[] }> => {
+      const productMatches = [product[1], product[2], product[3], product[6], product[12]].some(
+        (value) => String(value ?? "").toLowerCase().includes(searchTerm),
+      );
+      if (productMatches) return [{ product }];
+
+      return allVariants
+        .filter(
+          (variant) =>
+            variant[1] === product[0] &&
+            [variant[2], variant[3], variant[4], variant[6], variant[7]].some((value) =>
+              String(value ?? "").toLowerCase().includes(searchTerm),
+            ),
+        )
+        .map((variant) => ({ product, variant }));
+    },
+  ).slice(0, 8);
+  const currentStock =
+    selected?.quantity ?? (selectedProduct ? Number(selectedProduct[7] ?? 0) : 0);
+  const addingQuantity = Number(quantity) || 0;
+
+  const selectProduct = (id: string, selectedVariantId = "") => {
+    const product = allProducts.find((row) => row[0] === id);
+    const variant = allVariants.find((row) => row[0] === selectedVariantId);
+    setProductId(id);
+    setVariantId(selectedVariantId);
+    setProductSearch(product?.[1] ?? "");
+    setProductPickerOpen(false);
+    if (variant) setPurchasePrice(variant[9] ?? "0");
+    else if (product) setPurchasePrice(product[8] ?? "0");
+  };
+
+  const onCreated = (created: CreatedProduct) => {
+    const productRow = [
+      created.productId, created.name, "", "", "", "pcs", "", "0",
+      String(created.purchasePrice), "0", "0", "Active", created.sku,
+    ];
+    setNewProducts((current) => [...current, productRow]);
+    if (created.variantId) {
+      const [size = "", color = ""] = created.variantLabel.split(" / ");
+      setNewVariants((current) => [...current, [
+        created.variantId, created.productId, created.variantLabel, created.sku, "",
+        "CODE128", size, color, "", String(created.purchasePrice), "0", "0", "0",
+        "pcs", "Active",
+      ]]);
+    }
+    setProductId(created.productId);
+    setVariantId(created.variantId);
+    setProductSearch(created.name);
+    setProductPickerOpen(false);
+    setPurchasePrice(String(created.purchasePrice));
+  };
+
+  const submitSupplier = async (event: React.FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    const form = new FormData(event.currentTarget);
+    const payload = {
+      name: String(form.get("stock-supplier-name") ?? ""),
+      phone: String(form.get("stock-supplier-phone") ?? ""),
+      whatsapp: String(form.get("stock-supplier-whatsapp") ?? ""),
+      email: String(form.get("stock-supplier-email") ?? ""),
+      address: String(form.get("stock-supplier-address") ?? ""),
+      gstin: String(form.get("stock-supplier-gstin") ?? ""),
+    };
+    try {
+      const result = await saveSupplier({ data: payload });
+      setLocalSuppliers((current) => [
+        ...current,
+        [result.id, result.name, payload.phone, payload.address, "", "", payload.gstin, "", "", payload.whatsapp, payload.email],
+      ]);
+      setSupplier(result.name);
+      setCreateSupplierOpen(false);
+      await queryClient.invalidateQueries({ queryKey: ["erp"] });
+      toast.success("Supplier created.");
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "Could not create supplier.");
+    }
+  };
+
   const submit = async (event: React.FormEvent<HTMLFormElement>) => {
     event.preventDefault();
     setBusy(true);
@@ -472,6 +568,7 @@ function StockForm({
     }
   };
   return (
+    <>
     <Card className="max-w-3xl">
       <CardHeader>
         <CardTitle className="text-sm">Add Stock</CardTitle>
@@ -487,25 +584,62 @@ function StockForm({
           </div>
         )}
         <form className="grid gap-4 md:grid-cols-2" onSubmit={submit}>
-          <div className="space-y-2">
-            <Label htmlFor="stock-product">Product</Label>
-            <select
-              id="stock-product"
-              required
-              value={productId}
-              onChange={(event) => {
-                setProductId(event.target.value);
-                setVariantId("");
-              }}
-              className="h-10 w-full rounded-md border border-input bg-background px-3 text-sm"
-            >
-              <option value="">Select product</option>
-              {products.map((row) => (
-                <option key={row[0]} value={row[0]}>
-                  {row[1]}
-                </option>
-              ))}
-            </select>
+          <div className="space-y-2 md:col-span-2">
+            <Label htmlFor="stock-product-search">Product</Label>
+            <div className="flex gap-2">
+              <Input
+                id="stock-product-search"
+                role="combobox"
+                aria-expanded={productPickerOpen}
+                aria-controls="stock-product-options"
+                aria-autocomplete="list"
+                placeholder="Search product, SKU or barcode..."
+                required={!productId}
+                value={productSearch}
+                onFocus={() => setProductPickerOpen(true)}
+                onChange={(event) => {
+                  setProductSearch(event.target.value);
+                  setProductId("");
+                  setVariantId("");
+                  setProductPickerOpen(true);
+                }}
+              />
+              <Button type="button" onClick={() => setCreateProductOpen(true)}>
+                + Add New Product
+              </Button>
+            </div>
+            {productPickerOpen && (
+              <div id="stock-product-options" role="listbox" className="max-h-56 overflow-y-auto rounded-md border bg-popover p-1 shadow-sm">
+                {searchResults.length ? searchResults.map(({ product, variant }) => (
+                  <button
+                    type="button"
+                    role="option"
+                    aria-selected={product[0] === productId && (!variant || variant[0] === variantId)}
+                    key={`${product[0]}-${variant?.[0] ?? "product"}`}
+                    onClick={() => selectProduct(product[0] ?? "", variant?.[0] ?? "")}
+                    className="flex w-full flex-col rounded-sm px-3 py-2 text-left text-sm hover:bg-accent"
+                  >
+                    <span className="font-medium">
+                      {product[1]}{variant ? ` · ${[variant[6], variant[7], variant[2]].filter(Boolean).join(" / ")}` : ""}
+                    </span>
+                    <span className="text-xs text-muted-foreground">
+                      {[
+                        (variant?.[3] ?? product[12]) && `SKU ${variant?.[3] ?? product[12]}`,
+                        (variant?.[4] ?? product[6]) && `Barcode ${variant?.[4] ?? product[6]}`,
+                      ].filter(Boolean).join(" · ")}
+                    </span>
+                  </button>
+                )) : (
+                  <div className="flex items-center justify-between gap-2 px-3 py-3 text-sm">
+                    <span>No product found</span>
+                    <Button type="button" size="sm" variant="outline" onClick={() => setCreateProductOpen(true)}>
+                      + Add New Product
+                    </Button>
+                  </div>
+                )}
+              </div>
+            )}
+            {productId && selectedProduct && <p className="text-xs text-muted-foreground">Selected: {selectedProduct[1]}</p>}
           </div>
           {productVariants.length > 0 && (
             <div className="space-y-2">
@@ -556,24 +690,23 @@ function StockForm({
           <div className="space-y-2">
             <Label>Current stock</Label>
             <div className="rounded-md border px-3 py-2 text-sm">
-              {selected?.quantity ?? (selectedProduct ? Number(selectedProduct[7] ?? 0) : 0)}
+              {currentStock}
             </div>
           </div>
           <div className="space-y-2">
             <Label htmlFor="stock-supplier">Supplier</Label>
-            <select
-              id="stock-supplier"
-              value={supplier}
-              onChange={(event) => setSupplier(event.target.value)}
-              className="h-10 w-full rounded-md border border-input bg-background px-3 text-sm"
-            >
-              <option value="">Select supplier</option>
-              {suppliers.map((row) => (
-                <option key={row[0]} value={row[1]}>
-                  {row[1]}
-                </option>
-              ))}
-            </select>
+            <div className="flex gap-2">
+              <select
+                id="stock-supplier"
+                value={supplier}
+                onChange={(event) => setSupplier(event.target.value)}
+                className="h-10 min-w-0 flex-1 rounded-md border border-input bg-background px-3 text-sm"
+              >
+                <option value="">Select supplier</option>
+                {localSuppliers.map((row) => <option key={row[0]} value={row[1]}>{row[1]}</option>)}
+              </select>
+              <Button type="button" variant="outline" onClick={() => setCreateSupplierOpen(true)}>+ Add Supplier</Button>
+            </div>
           </div>
           <div className="space-y-2">
             <Label htmlFor="stock-batch">Batch number</Label>
@@ -609,6 +742,13 @@ function StockForm({
               onChange={(event) => setNotes(event.target.value)}
             />
           </div>
+          <div className="rounded-md border bg-muted/20 p-3 text-sm md:col-span-2">
+            Previous Stock: <strong>{currentStock}</strong>
+            <span className="mx-2 text-muted-foreground">·</span>
+            Adding: <strong>+{addingQuantity}</strong>
+            <span className="mx-2 text-muted-foreground">·</span>
+            New Stock: <strong>{currentStock + addingQuantity}</strong>
+          </div>
           <div className="flex justify-end gap-2 md:col-span-2">
             <Button type="button" variant="outline" asChild>
               <Link to="/inventory/$view" params={{ view: "stock" }}>
@@ -622,6 +762,28 @@ function StockForm({
         </form>
       </CardContent>
     </Card>
+    <ProductQuickCreateDialog
+      open={createProductOpen}
+      onOpenChange={setCreateProductOpen}
+      suppliers={localSuppliers}
+      categories={categories}
+      onCreated={onCreated}
+    />
+    <Dialog open={createSupplierOpen} onOpenChange={setCreateSupplierOpen}>
+      <DialogContent className="max-w-lg">
+        <DialogHeader><DialogTitle>ADD SUPPLIER</DialogTitle></DialogHeader>
+        <form className="grid gap-3 sm:grid-cols-2" onSubmit={submitSupplier}>
+          <div className="space-y-2 sm:col-span-2"><Label htmlFor="stock-supplier-name">Supplier Name *</Label><Input id="stock-supplier-name" name="stock-supplier-name" required /></div>
+          <div className="space-y-2"><Label htmlFor="stock-supplier-phone">Phone</Label><Input id="stock-supplier-phone" name="stock-supplier-phone" /></div>
+          <div className="space-y-2"><Label htmlFor="stock-supplier-whatsapp">WhatsApp</Label><Input id="stock-supplier-whatsapp" name="stock-supplier-whatsapp" /></div>
+          <div className="space-y-2 sm:col-span-2"><Label htmlFor="stock-supplier-email">Email</Label><Input id="stock-supplier-email" name="stock-supplier-email" type="email" /></div>
+          <div className="space-y-2 sm:col-span-2"><Label htmlFor="stock-supplier-address">Address</Label><Input id="stock-supplier-address" name="stock-supplier-address" /></div>
+          <div className="space-y-2 sm:col-span-2"><Label htmlFor="stock-supplier-gstin">GSTIN</Label><Input id="stock-supplier-gstin" name="stock-supplier-gstin" /></div>
+          <DialogFooter className="sm:col-span-2"><Button type="button" variant="outline" onClick={() => setCreateSupplierOpen(false)}>Cancel</Button><Button type="submit">+ Create Supplier</Button></DialogFooter>
+        </form>
+      </DialogContent>
+    </Dialog>
+    </>
   );
 }
 

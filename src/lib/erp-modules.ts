@@ -96,6 +96,7 @@ export const HIDDEN_SHEETS = [
   "POS Payments",
   "Audit History",
   "Stock Movements",
+  "Categories",
 ];
 
 export const ALLOWED_SHEET_TITLES = [
