@@ -1,5 +1,5 @@
 import { createMiddleware, createServerFn } from "@tanstack/react-start";
-import { assertAuthenticated } from "./auth.server";
+import { assertAuthenticated, readSessionEmail } from "./auth.server";
 import {
   readRange,
   readRanges,
@@ -12,15 +12,22 @@ import {
   writeSettings,
   createProduct,
   createCustomer,
+  createSupplier,
   saveReturn,
   getSpreadsheetId,
   recordStockMovement,
+  getInventorySnapshot,
+  addInventoryStock,
+  adjustInventoryStock,
   type InvoiceInput,
   type ErpSettings,
   type ProductInput,
   type CustomerInput,
+  type SupplierInput,
   type ReturnInput,
   type StockMovementInput,
+  type ManualStockInput,
+  type StockAdjustmentInput,
   type DealerInput,
   type DealerOrderInput,
   createDealer,
@@ -157,7 +164,7 @@ export const createInvoice = createServerFn({ method: "POST" })
     boundedNumber(data.paid, "Paid amount");
     return data;
   })
-  .handler(async ({ data }) => saveInvoice(data));
+  .handler(async ({ data }) => saveInvoice(data, readSessionEmail()));
 
 export const getErpSettings = createServerFn({ method: "GET" })
   .middleware([requireAuth])
@@ -191,7 +198,7 @@ export const addProduct = createServerFn({ method: "POST" })
     if (data.gstPercent !== undefined) boundedNumber(data.gstPercent, "GST rate", 0, 100);
     return data;
   })
-  .handler(async ({ data }) => createProduct(data));
+  .handler(async ({ data }) => createProduct(data, readSessionEmail()));
 
 export const addCustomer = createServerFn({ method: "POST" })
   .middleware([requireAuth])
@@ -200,6 +207,14 @@ export const addCustomer = createServerFn({ method: "POST" })
     return data;
   })
   .handler(async ({ data }) => createCustomer(data));
+
+export const addSupplier = createServerFn({ method: "POST" })
+  .middleware([requireAuth])
+  .validator((data: SupplierInput) => {
+    requiredText(data?.name, "Supplier name", 160);
+    return data;
+  })
+  .handler(async ({ data }) => createSupplier(data));
 
 export const createReturn = createServerFn({ method: "POST" })
   .middleware([requireAuth])
@@ -216,7 +231,7 @@ export const createReturn = createServerFn({ method: "POST" })
     });
     return data;
   })
-  .handler(async ({ data }) => saveReturn(data));
+  .handler(async ({ data }) => saveReturn(data, readSessionEmail()));
 
 export const updateStockLevel = createServerFn({ method: "POST" })
   .middleware([requireAuth])
@@ -231,7 +246,31 @@ export const updateStockLevel = createServerFn({ method: "POST" })
     if (!data.product) requiredText(data.product ?? "Unknown Product", "Product", 160);
     return data;
   })
-  .handler(async ({ data }) => recordStockMovement(data));
+  .handler(async ({ data }) => recordStockMovement(data, readSessionEmail()));
+
+export const getInventoryData = createServerFn({ method: "GET" })
+  .middleware([requireAuth])
+  .handler(async () => getInventorySnapshot());
+
+export const addStock = createServerFn({ method: "POST" })
+  .middleware([requireAuth])
+  .validator((data: ManualStockInput) => {
+    requiredText(data?.productId, "Product", 160);
+    boundedNumber(data.quantity, "Quantity", 0.0001, 1_000_000);
+    if (data.purchasePrice !== undefined) boundedNumber(data.purchasePrice, "Purchase price");
+    return data;
+  })
+  .handler(async ({ data }) => addInventoryStock(data, readSessionEmail()));
+
+export const adjustStock = createServerFn({ method: "POST" })
+  .middleware([requireAuth])
+  .validator((data: StockAdjustmentInput) => {
+    requiredText(data?.productId, "Product", 160);
+    boundedNumber(data.physicalStock, "Physical stock", 0, 1_000_000);
+    requiredText(data.reason, "Reason", 160);
+    return data;
+  })
+  .handler(async ({ data }) => adjustInventoryStock(data, readSessionEmail()));
 
 export const logDownload = createServerFn({ method: "POST" })
   .middleware([requireAuth])

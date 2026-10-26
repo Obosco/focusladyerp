@@ -1,5 +1,5 @@
 export type InvoiceMode = "gst" | "non-gst" | "quotation";
-export type InvoiceItem = { product: string; hsn: string; qty: number; rate: number; gstPercent: number };
+export type InvoiceItem = { product: string; variantId?: string; hsn: string; qty: number; rate: number; gstPercent: number; size?: string; color?: string };
 export type InvoiceDraft = { mode: InvoiceMode; invoice: string; customerId: string; date: string; validUntil: string; customer: string; customerPhone: string; customerAddress: string; customerCity: string; customerState: string; gstin: string; items: InvoiceItem[]; discount: number; paid: number; paymentMode: string; notes: string };
 export const COMPANY = { name: "OBOSCO CLOTHING INDUSTRIES", address: "Near by Police Station Tanur, First Floor 22/242", state: "Kerala", phone: "+91 8089457918" };
 export const emptyItem = (): InvoiceItem => ({ product: "", hsn: "", qty: 1, rate: 0, gstPercent: 0 });

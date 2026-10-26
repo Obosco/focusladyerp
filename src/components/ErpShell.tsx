@@ -1,19 +1,45 @@
 import { Link, useNavigate, useRouterState } from "@tanstack/react-router";
 import { MODULES, GROUPS, type ErpModule } from "@/lib/erp-modules";
 import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import {
+  Dialog,
+  DialogContent,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuLabel,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 import { cn } from "@/lib/utils";
 import {
   ArrowLeft,
   BarChart3,
   Bell,
+  Boxes,
   Bot,
   ExternalLink,
   FilePlus2,
   LogOut,
+  Plus,
+  Package,
+  ShoppingCart,
+  Truck,
+  Users,
   Receipt,
   RefreshCcw,
   Settings,
   Store,
+  History,
+  TriangleAlert,
+  SlidersHorizontal,
 } from "lucide-react";
 import { signOutClean } from "@/lib/session";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
@@ -23,6 +49,8 @@ import { getSheetsConnection } from "@/lib/sheets.functions";
 import { getLastSyncLabel, setLastSyncStamp } from "@/lib/erp-cache";
 import { getNotifications, markAllNotificationsRead, markNotificationRead } from "@/lib/notifications";
 import { toast } from "sonner";
+import { addCustomer, addSupplier } from "@/lib/sheets.functions";
+import { useServerFn } from "@tanstack/react-start";
 
 
 function NavItem({ mod, active }: { mod: ErpModule; active: boolean }) {
@@ -62,6 +90,7 @@ export function ErpShell({
   const queryClient = useQueryClient();
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [showNotifications, setShowNotifications] = useState(false);
+  const [quickCreateType, setQuickCreateType] = useState<"customer" | "supplier" | null>(null);
   const lastSyncLabel = getLastSyncLabel();
   const notifications = useMemo(() => getNotifications().slice(0, 6), []);
   const unreadCount = useMemo(
@@ -150,6 +179,34 @@ export function ErpShell({
                       ? "bg-sidebar-primary text-sidebar-primary-foreground"
                       : "text-sidebar-foreground hover:bg-sidebar-accent hover:text-sidebar-accent-foreground",
                   )}>
+                    <item.Icon className="h-4 w-4 shrink-0" />
+                    <span className="truncate">{item.label}</span>
+                  </Link>
+                ))}
+              </div>
+            </div>
+
+            <div className="mb-4">
+              <div className="mb-1 px-3 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">Inventory</div>
+              <div className="flex flex-col gap-0.5">
+                {[
+                  { view: "stock", label: "Current Stock", Icon: Boxes },
+                  { view: "add", label: "Add Stock", Icon: FilePlus2 },
+                  { view: "movements", label: "Stock Movements", Icon: History },
+                  { view: "low-stock", label: "Low Stock", Icon: TriangleAlert },
+                  { view: "adjust", label: "Stock Adjustment", Icon: SlidersHorizontal },
+                ].map((item) => (
+                  <Link
+                    key={item.view}
+                    to="/inventory/$view"
+                    params={{ view: item.view }}
+                    className={cn(
+                      "flex items-center gap-2 rounded-md px-3 py-2 text-sm transition-colors",
+                      path === `/inventory/${item.view}`
+                        ? "bg-sidebar-primary text-sidebar-primary-foreground"
+                        : "text-sidebar-foreground hover:bg-sidebar-accent hover:text-sidebar-accent-foreground",
+                    )}
+                  >
                     <item.Icon className="h-4 w-4 shrink-0" />
                     <span className="truncate">{item.label}</span>
                   </Link>
@@ -249,6 +306,44 @@ export function ErpShell({
                 </div>
               </div>
               <div className="flex items-center gap-2">
+                <DropdownMenu>
+                  <DropdownMenuTrigger asChild>
+                    <Button size="sm" aria-label="Add a new record">
+                      <Plus className="mr-1 h-4 w-4" />
+                      <span className="hidden sm:inline">Add New</span>
+                      <span className="sm:hidden">Add</span>
+                    </Button>
+                  </DropdownMenuTrigger>
+                  <DropdownMenuContent align="end" className="w-56">
+                    <DropdownMenuLabel>Quick add</DropdownMenuLabel>
+                    <DropdownMenuSeparator />
+                    <DropdownMenuItem asChild>
+                      <Link to="/invoices/new"><FilePlus2 />New Invoice</Link>
+                    </DropdownMenuItem>
+                    <DropdownMenuItem asChild>
+                      <Link to="/products/new"><Package />New Product</Link>
+                    </DropdownMenuItem>
+                    <DropdownMenuItem asChild>
+                      <Link to="/inventory/$view" params={{ view: "add" }}><Boxes />Add Stock</Link>
+                    </DropdownMenuItem>
+                    <DropdownMenuItem asChild>
+                      <Link to="/inventory/$view" params={{ view: "adjust" }}><SlidersHorizontal />Stock Adjustment</Link>
+                    </DropdownMenuItem>
+                    <DropdownMenuItem asChild>
+                      <Link to="/pos"><ShoppingCart />New Sale</Link>
+                    </DropdownMenuItem>
+                    <DropdownMenuItem asChild>
+                      <Link to="/dealer-orders/new"><Store />Dealer Order</Link>
+                    </DropdownMenuItem>
+                    <DropdownMenuSeparator />
+                    <DropdownMenuItem onSelect={() => setQuickCreateType("customer")}>
+                      <Users />New Customer
+                    </DropdownMenuItem>
+                    <DropdownMenuItem onSelect={() => setQuickCreateType("supplier")}>
+                      <Truck />New Supplier
+                    </DropdownMenuItem>
+                  </DropdownMenuContent>
+                </DropdownMenu>
                 <div className="hidden items-center gap-1 rounded-md border border-border bg-muted/30 px-2 py-1 text-[10px] text-muted-foreground md:flex">
                   <span>Last sync</span>
                   <span className="font-medium text-foreground">{lastSyncLabel}</span>
@@ -317,9 +412,107 @@ export function ErpShell({
               </div>
             </div>
           </header>
+          <QuickCreateDialog
+            type={quickCreateType}
+            onClose={() => setQuickCreateType(null)}
+          />
           <div className="p-6">{children}</div>
         </main>
       </div>
     </div>
+  );
+}
+
+function QuickCreateDialog({
+  type,
+  onClose,
+}: {
+  type: "customer" | "supplier" | null;
+  onClose: () => void;
+}) {
+  const [name, setName] = useState("");
+  const [phone, setPhone] = useState("");
+  const [address, setAddress] = useState("");
+  const [city, setCity] = useState("");
+  const [state, setState] = useState("");
+  const [gstin, setGstin] = useState("");
+  const [isSaving, setIsSaving] = useState(false);
+  const queryClient = useQueryClient();
+  const saveCustomer = useServerFn(addCustomer);
+  const saveSupplier = useServerFn(addSupplier);
+
+  const close = (force = false) => {
+    if (isSaving && !force) return;
+    setName("");
+    setPhone("");
+    setAddress("");
+    setCity("");
+    setState("");
+    setGstin("");
+    onClose();
+  };
+
+  async function submit(event: React.FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    if (!type) return;
+    setIsSaving(true);
+    try {
+      const payload = { name, phone, address, city, state, gstin };
+      if (type === "customer") await saveCustomer({ data: payload });
+      else await saveSupplier({ data: payload });
+      await queryClient.invalidateQueries({ queryKey: ["erp"] });
+      toast.success(`${type === "customer" ? "Customer" : "Supplier"} added.`);
+      close(true);
+    } catch (error) {
+      toast.error(
+        error instanceof Error
+          ? error.message
+          : `Could not add ${type}.`,
+      );
+    } finally {
+      setIsSaving(false);
+    }
+  }
+
+  return (
+    <Dialog open={type !== null} onOpenChange={(open) => !open && close()}>
+      <DialogContent>
+        <DialogHeader>
+          <DialogTitle>{type === "customer" ? "Add Customer" : "Add Supplier"}</DialogTitle>
+        </DialogHeader>
+        <form className="space-y-4" onSubmit={submit}>
+          <div className="grid gap-3 sm:grid-cols-2">
+            <div className="space-y-2 sm:col-span-2">
+              <Label htmlFor="quick-create-name">Name *</Label>
+              <Input id="quick-create-name" value={name} onChange={(event) => setName(event.target.value)} required maxLength={160} />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="quick-create-phone">Phone</Label>
+              <Input id="quick-create-phone" value={phone} onChange={(event) => setPhone(event.target.value)} />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="quick-create-gstin">GSTIN</Label>
+              <Input id="quick-create-gstin" value={gstin} onChange={(event) => setGstin(event.target.value)} />
+            </div>
+            <div className="space-y-2 sm:col-span-2">
+              <Label htmlFor="quick-create-address">Address</Label>
+              <Input id="quick-create-address" value={address} onChange={(event) => setAddress(event.target.value)} />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="quick-create-city">City</Label>
+              <Input id="quick-create-city" value={city} onChange={(event) => setCity(event.target.value)} />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="quick-create-state">State</Label>
+              <Input id="quick-create-state" value={state} onChange={(event) => setState(event.target.value)} />
+            </div>
+          </div>
+          <DialogFooter>
+            <Button type="button" variant="outline" onClick={() => close()} disabled={isSaving}>Cancel</Button>
+            <Button type="submit" disabled={isSaving}>{isSaving ? "Saving..." : "+ Add"}</Button>
+          </DialogFooter>
+        </form>
+      </DialogContent>
+    </Dialog>
   );
 }

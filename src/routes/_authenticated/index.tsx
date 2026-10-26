@@ -8,13 +8,16 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { BarChart3, Plus, RefreshCcw } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
+import { normalizeDate } from "@/lib/erp-data";
 
 const KPI_RANGES = [
   "Dashboard!A1:B20",
   "Sales!A2:H1000",
   "Purchases!A2:F1000",
   "Expenses!A2:C1000",
-  "Products!A2:F1000",
+  "Products!A2:L5000",
+  "'Product Variants'!A2:Q10000",
+  "'Stock Movements'!A2:T50000",
   "'Sale Items'!A2:G5000",
   "Customers!A2:D1000",
   "Suppliers!A2:D1000",
@@ -134,6 +137,8 @@ function DashboardContent() {
   const saleItems = getRows("Sale Items");
   const customers = getRows("Customers");
   const suppliers = getRows("Suppliers");
+  const variants = getRows("Product Variants");
+  const stockMovements = getRows("Stock Movements");
 
   const totalSalesExclGst = sumCol(sales, 3);
   const totalSalesInclGst = sumCol(sales, 5);
@@ -145,8 +150,44 @@ function DashboardContent() {
   const costOfGoods = saleItems.reduce((sum, row) => sum + toNum(row[4]) * (productCosts.get((row[3] ?? "").trim().toLowerCase()) ?? 0), 0);
   const grossProfit = totalSalesExclGst - costOfGoods;
   const netProfit = grossProfit - totalExpenses;
+  const today = new Date().toISOString().slice(0, 10);
+  const todaySalesRows = sales.filter((row) => normalizeDate(row[1]) === today);
+  const todaySales = sumCol(todaySalesRows, 5);
+  const todayCollections = sumCol(todaySalesRows, 6);
+  const variantsByProduct = new Map<string, string[][]>();
+  for (const variant of variants) {
+    const productVariants = variantsByProduct.get(variant[1] ?? "");
+    if (productVariants) productVariants.push(variant);
+    else variantsByProduct.set(variant[1] ?? "", [variant]);
+  }
+  const movementTotals = new Map<string, number>();
+  for (const movement of stockMovements) {
+    const key = `${movement[2] ?? ""}|${movement[3] ?? ""}`;
+    movementTotals.set(key, (movementTotals.get(key) ?? 0) + toNum(movement[9]));
+  }
+  const currentStock = products.flatMap((product) => {
+    const productVariants = variantsByProduct.get(product[0] ?? "") ?? [];
+    const balances = productVariants.length ? productVariants : [undefined];
+    return balances.map((variant) => {
+      const variantId = variant?.[0] ?? "";
+      const movementTotal = movementTotals.get(`${product[0] ?? ""}|${variantId}`) ?? 0;
+      return {
+        quantity: toNum(variant?.[11] ?? product[7]) + movementTotal,
+        reorder: toNum(variant?.[12] ?? product[10]),
+        cost: toNum(variant?.[9] ?? product[8]),
+      };
+    });
+  });
+  const stockValue = currentStock.reduce((sum, row) => sum + row.quantity * row.cost, 0);
+  const lowStockCount = currentStock.filter((row) => row.quantity > 0 && row.quantity <= row.reorder).length;
+  const outOfStockCount = currentStock.filter((row) => row.quantity <= 0).length;
 
   const kpis = [
+    { label: "Today's Sales", value: fmt(todaySales), tone: "text-emerald-600 dark:text-emerald-400" },
+    { label: "Today's Collections", value: fmt(todayCollections), tone: "" },
+    { label: "Stock Value", value: fmt(stockValue), tone: "" },
+    { label: "Low Stock Items", value: fmt(lowStockCount), tone: "text-amber-600 dark:text-amber-400" },
+    { label: "Out of Stock", value: fmt(outOfStockCount), tone: "text-destructive" },
     { label: "Sales (excl. GST)", value: fmt(totalSalesExclGst), tone: "text-emerald-600 dark:text-emerald-400" },
     { label: "Sales (incl. GST)", value: fmt(totalSalesInclGst), tone: "text-emerald-600 dark:text-emerald-400" },
     { label: "Total Purchases", value: fmt(totalPurchases), tone: "" },
@@ -169,6 +210,15 @@ function DashboardContent() {
 
   return (
     <div className="space-y-6">
+      <section aria-label="Quick actions" className="flex flex-wrap gap-2">
+        <Button size="sm" asChild><Link to="/invoices/new">+ New Invoice</Link></Button>
+        <Button size="sm" variant="outline" asChild><Link to="/inventory/$view" params={{ view: "add" }}>+ Add Stock</Link></Button>
+        <Button size="sm" variant="outline" asChild><Link to="/sheet/$slug" params={{ slug: "purchases" }}>Purchases</Link></Button>
+        <Button size="sm" variant="outline" asChild><Link to="/sheet/$slug" params={{ slug: "customers" }}>Customers</Link></Button>
+        <Button size="sm" variant="outline" asChild><Link to="/sheet/$slug" params={{ slug: "suppliers" }}>Suppliers</Link></Button>
+        <Button size="sm" variant="outline" asChild><Link to="/inventory/$view" params={{ view: "adjust" }}>+ Stock Adjustment</Link></Button>
+        <Button size="sm" variant="outline" asChild><Link to="/sheet/$slug" params={{ slug: "collection" }}>Collections</Link></Button>
+      </section>
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6">
         {kpis.map((k) => (
           <Card key={k.label}>

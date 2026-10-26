@@ -19,7 +19,7 @@ import type { Invoice } from "@/components/invoice/invoice.types";
 
 const mastersQuery = queryOptions({
   queryKey: ["erp", "invoice-masters"],
-  queryFn: () => getSheetsBatch({ data: { ranges: ["Customers!A2:T5000", "Products!A2:I1000", "Sales!A2:A2000"] } }),
+  queryFn: () => getSheetsBatch({ data: { ranges: ["Customers!A2:T5000", "Products!A2:I1000", "'Product Variants'!A2:Q10000", "Sales!A2:A2000"] } }),
  staleTime: 30_000,
 });
 
@@ -99,6 +99,7 @@ function InvoiceEditor() {
   const rows = (name: string) => data.valueRanges.find((range) => range.range.includes(name))?.values ?? [];
   const customers = rows("Customers").filter((row) => (row[1] ?? "").trim()) as CustomerRow[];
   const products = rows("Products").filter((row) => (row[1] ?? "").trim());
+  const variants = rows("Product Variants").filter((row) => (row[0] ?? "").trim());
   const existing = rows("Sales").map((row) => row[0] ?? "");
   const today = new Date().toISOString().slice(0, 10);
   const [mode, setMode] = useState<InvoiceMode>("gst");
@@ -135,7 +136,29 @@ function InvoiceEditor() {
   const printableInvoice = toPrintableInvoice(draft);
   const totals = invoiceTotals(draft);
   const setItem = (index: number, patch: Partial<InvoiceItem>) => setItems((current) => current.map((item, itemIndex) => itemIndex === index ? { ...item, ...patch } : item));
-  const chooseProduct = (index: number, name: string) => { const product = products.find((row) => row[1] === name); setItem(index, { product: name, hsn: product?.[0] ?? "", rate: Number(product?.[5] ?? 0), gstPercent: Number(product?.[8] ?? 0) }); };
+  const chooseProduct = (index: number, name: string) => {
+    const product = products.find((row) => row[1] === name);
+    const productVariants = variants.filter((row) => row[1] === product?.[0]);
+    const variant = productVariants.length === 1 ? productVariants[0] : undefined;
+    setItem(index, {
+      product: name,
+      variantId: variant?.[0],
+      size: variant?.[6] ?? "",
+      color: variant?.[7] ?? "",
+      hsn: product?.[0] ?? "",
+      rate: Number(variant?.[10] ?? product?.[5] ?? 0),
+      gstPercent: Number(product?.[8] ?? 0),
+    });
+  };
+  const chooseVariant = (index: number, variantId: string) => {
+    const variant = variants.find((row) => row[0] === variantId);
+    setItem(index, {
+      variantId,
+      size: variant?.[6] ?? "",
+      color: variant?.[7] ?? "",
+      rate: Number(variant?.[10] ?? 0),
+    });
+  };
   const submit = async () => {
     const validItems = items.filter((item) => item.product.trim() && item.qty > 0);
     if (!customer.trim()) return toast.error("Customer name is required");
@@ -152,7 +175,52 @@ function InvoiceEditor() {
     <div className="space-y-4 print:hidden">
       <Card><CardHeader><CardTitle className="text-sm">Invoice Type</CardTitle></CardHeader><CardContent className="grid grid-cols-3 gap-2">{([["gst", "GST TAX INVOICE"], ["non-gst", "NON-GST BILL"], ["quotation", "QUOTATION"]] as [InvoiceMode, string][]).map(([value, label]) => <Button key={value} variant={mode === value ? "default" : "outline"} className="h-10 rounded-none px-1 text-[10px]" onClick={() => setMode(value)}>{label}</Button>)}</CardContent></Card>
       <Card><CardHeader><CardTitle className="text-sm">Invoice Details</CardTitle></CardHeader><CardContent className="grid grid-cols-2 gap-3"><Field label={mode === "quotation" ? "Quotation No." : "Invoice No."} value={invoice} readOnly /><Field label="Invoice Date" value={date} setValue={setDate} type="date" /><Field label="M/S / Phone" value={customer} setValue={selectCustomer} list="customers" className="col-span-2" /><Field label="Phone" value={customerPhone} setValue={setCustomerPhone} /><Field label="Address" value={customerAddress} setValue={setCustomerAddress} className="col-span-2" />{mode === "quotation" && <Field label="Valid Until" value={validUntil} setValue={setValidUntil} type="date" />}{mode === "gst" && <><Field label="GSTIN" value={gstin} setValue={setGstin} /><Field label="City" value={customerCity} setValue={setCustomerCity} /><Field label="State" value={customerState} setValue={setCustomerState} /></>}</CardContent></Card>
-      <Card><CardHeader className="flex-row items-center justify-between"><CardTitle className="text-sm">Product Rows</CardTitle><Button variant="outline" size="sm" className="rounded-none" onClick={() => setItems((current) => [...current, emptyItem()])}><Plus className="mr-1 h-4 w-4" />Add row</Button></CardHeader><CardContent className="space-y-2">{items.map((item, index) => <div key={index} className="grid grid-cols-12 gap-2 border-b border-black/10 pb-2"><Field label="Description" value={item.product} setValue={(value) => chooseProduct(index, value)} list="products" className="col-span-5" />{mode === "gst" && <Field label="HSN" value={item.hsn} setValue={(value) => setItem(index, { hsn: value })} className="col-span-2" />}<Field label="Qty" value={String(item.qty)} setValue={(value) => setItem(index, { qty: Number(value) })} type="number" className="col-span-2" /><Field label="Rate" value={String(item.rate)} setValue={(value) => setItem(index, { rate: Number(value) })} type="number" className="col-span-2" /><Button variant="ghost" size="icon" className="mt-4 h-8 w-8" disabled={items.length === 1} onClick={() => setItems((current) => current.filter((_, itemIndex) => itemIndex !== index))}><Trash2 className="h-4 w-4" /></Button>{mode === "gst" && <Field label="GST %" value={String(item.gstPercent)} setValue={(value) => setItem(index, { gstPercent: Number(value) })} type="number" className="col-span-2" />}<div className="col-span-5 self-end text-right text-xs">Taxable {money(itemValues(item, mode).taxable)} | Total {money(itemValues(item, mode).total)}</div></div>)}<datalist id="products">{products.map((row, index) => <option key={index} value={row[1]} />)}</datalist><datalist id="customers">{customers.map((row, index) => (<Fragment key={index}><option value={row[1]} /><option value={row[2]} /></Fragment>))}</datalist></CardContent></Card>
+      <Card>
+        <CardHeader className="flex-row items-center justify-between">
+          <CardTitle className="text-sm">Product Rows</CardTitle>
+          <Button variant="outline" size="sm" className="rounded-none" onClick={() => setItems((current) => [...current, emptyItem()])}>
+            <Plus className="mr-1 h-4 w-4" />Add row
+          </Button>
+        </CardHeader>
+        <CardContent className="space-y-2">
+          {items.map((item, index) => {
+            const product = products.find((row) => row[1] === item.product);
+            const itemVariants = variants.filter((row) => row[1] === product?.[0]);
+            return (
+              <div key={index} className="grid grid-cols-12 gap-2 border-b border-black/10 pb-2">
+                <Field label="Description" value={item.product} setValue={(value) => chooseProduct(index, value)} list="products" className="col-span-5" />
+                {itemVariants.length > 0 && (
+                  <div className="col-span-5">
+                    <Label className="text-[10px]">Variant</Label>
+                    <select
+                      value={item.variantId ?? ""}
+                      onChange={(event) => chooseVariant(index, event.target.value)}
+                      className="h-8 w-full border border-black/40 bg-white px-2 text-xs"
+                    >
+                      <option value="">Select size / color</option>
+                      {itemVariants.map((variant) => (
+                        <option key={variant[0]} value={variant[0]}>
+                          {[variant[6], variant[7], variant[2]].filter(Boolean).join(" / ")}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                )}
+                {mode === "gst" && <Field label="HSN" value={item.hsn} setValue={(value) => setItem(index, { hsn: value })} className="col-span-2" />}
+                <Field label="Qty" value={String(item.qty)} setValue={(value) => setItem(index, { qty: Number(value) })} type="number" className="col-span-2" />
+                <Field label="Rate" value={String(item.rate)} setValue={(value) => setItem(index, { rate: Number(value) })} type="number" className="col-span-2" />
+                <Button variant="ghost" size="icon" className="mt-4 h-8 w-8" disabled={items.length === 1} onClick={() => setItems((current) => current.filter((_, itemIndex) => itemIndex !== index))}>
+                  <Trash2 className="h-4 w-4" />
+                </Button>
+                {mode === "gst" && <Field label="GST %" value={String(item.gstPercent)} setValue={(value) => setItem(index, { gstPercent: Number(value) })} type="number" className="col-span-2" />}
+                <div className="col-span-5 self-end text-right text-xs">Taxable {money(itemValues(item, mode).taxable)} | Total {money(itemValues(item, mode).total)}</div>
+              </div>
+            );
+          })}
+          <datalist id="products">{products.map((row, index) => <option key={index} value={row[1]} />)}</datalist>
+          <datalist id="customers">{customers.map((row, index) => (<Fragment key={index}><option value={row[1]} /><option value={row[2]} /></Fragment>))}</datalist>
+        </CardContent>
+      </Card>
       <Card><CardHeader><CardTitle className="text-sm">Payment</CardTitle></CardHeader><CardContent className="grid grid-cols-2 gap-3"><Field label="Discount" value={String(discount)} setValue={(value) => setDiscount(Number(value))} type="number" /><Field label="Paid" value={String(paid)} setValue={(value) => setPaid(Number(value))} type="number" /><Field label="Payment Mode" value={paymentMode} setValue={setPaymentMode} /><Field label="Notes" value={notes} setValue={setNotes} className="col-span-2" /><div className="col-span-2 flex justify-between border-t border-black pt-2 font-semibold">Total <span>{money(totals.total)}</span></div><Button className="col-span-2 rounded-none bg-black text-white hover:bg-black/80" onClick={submit} disabled={busy}><Save className="mr-2 h-4 w-4" />{busy ? "Saving..." : "Save Invoice"}</Button></CardContent></Card>
     </div>
     <div>

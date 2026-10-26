@@ -13,7 +13,6 @@ import {
   createInvoice,
   getNextInvoiceNumber,
   getSheetsBatch,
-  updateStockLevel,
 } from "@/lib/sheets.functions";
 import { toast } from "sonner";
 
@@ -26,6 +25,9 @@ type CatalogItem = {
   stock: number;
   warehouse: string;
   productId: string;
+  variantId: string;
+  size: string;
+  color: string;
   category: string;
   brand: string;
 };
@@ -59,13 +61,18 @@ const productQuery = {
           "Customers!A2:T5000",
           "Sales!A2:A2000",
           "Settings!A2:B50",
+          "'Stock Movements'!A2:T50000",
         ],
       },
     }),
   staleTime: 30_000,
 };
 
-function parseCatalog(productRows: string[][], variantRows: string[][]): CatalogItem[] {
+function parseCatalog(
+  productRows: string[][],
+  variantRows: string[][],
+  stockMovements: string[][],
+): CatalogItem[] {
   const productMap = new Map<string, { name: string; category: string; brand: string; price: number; barcode: string; stock: number }>();
 
   for (const row of productRows) {
@@ -82,11 +89,18 @@ function parseCatalog(productRows: string[][], variantRows: string[][]): Catalog
   }
 
   const entries: CatalogItem[] = [];
+  const productIdsWithVariants = new Set(variantRows.map((row) => row[1]).filter(Boolean));
+  const movementTotals = new Map<string, number>();
+  for (const movement of stockMovements) {
+    const key = `${movement[2] ?? ""}|${movement[3] ?? ""}`;
+    movementTotals.set(key, (movementTotals.get(key) ?? 0) + toNum(movement[9]));
+  }
 
   for (const row of productRows) {
     const productName = String(row[1] ?? "").trim();
     if (!productName) continue;
     const productId = String(row[0] ?? "").trim() || productName;
+    if (productIdsWithVariants.has(productId)) continue;
     const productInfo = productMap.get(productId) ?? {
       name: productName,
       category: String(row[2] ?? "").trim(),
@@ -101,9 +115,12 @@ function parseCatalog(productRows: string[][], variantRows: string[][]): Catalog
       sku: productId,
       barcode: productInfo.barcode,
       price: productInfo.price,
-      stock: productInfo.stock,
+      stock: productInfo.stock + (movementTotals.get(`${productId}|`) ?? 0),
       warehouse: "Main Store",
       productId,
+      variantId: "",
+      size: "",
+      color: "",
       category: productInfo.category,
       brand: productInfo.brand,
     });
@@ -131,9 +148,12 @@ function parseCatalog(productRows: string[][], variantRows: string[][]): Catalog
       sku: variantSku || `${source.name}-${variantName}`,
       barcode: variantBarcode || source.barcode,
       price: toNum(row[10]) || source.price,
-      stock: toNum(row[11]) || source.stock,
+      stock: toNum(row[11]) + (movementTotals.get(`${productId}|${row[0] ?? ""}`) ?? 0),
       warehouse: "Main Store",
       productId,
+      variantId: String(row[0] ?? "").trim(),
+      size: String(row[6] ?? "").trim(),
+      color: String(row[7] ?? "").trim(),
       category: source.category,
       brand: source.brand,
     });
@@ -169,18 +189,17 @@ function PosPage() {
   const saveInvoice = useServerFn(createInvoice);
   const nextInvoice = useServerFn(getNextInvoiceNumber);
   const saveCustomer = useServerFn(addCustomer);
-  const stockUpdate = useServerFn(updateStockLevel);
-
   const productRows = (payload?.valueRanges?.[0]?.values ?? []) as string[][];
   const variantRows = (payload?.valueRanges?.[1]?.values ?? []) as string[][];
   const customerRows = (payload?.valueRanges?.[2]?.values ?? []) as string[][];
   const salesRows = (payload?.valueRanges?.[3]?.values ?? []) as string[][];
   const settingsRows = (payload?.valueRanges?.[4]?.values ?? []) as string[][];
+  const stockMovementRows = (payload?.valueRanges?.[5]?.values ?? []) as string[][];
   const settings = new Map(settingsRows.map((row) => [row[0] ?? "", row[1] ?? ""]));
 
   const catalog = useMemo(
-    () => parseCatalog(productRows, variantRows),
-    [productRows, variantRows],
+    () => parseCatalog(productRows, variantRows, stockMovementRows),
+    [productRows, variantRows, stockMovementRows],
   );
 
   const [barcodeInput, setBarcodeInput] = useState("");
@@ -339,11 +358,12 @@ function PosPage() {
         customerState,
         items: cart.map((item) => ({
           product: item.product,
+          variantId: item.variantId,
           qty: item.qty,
           rate: item.price,
           gstPercent: item.gstPercent,
-          size: item.variant !== "Default" ? item.variant : "",
-          color: "",
+          size: item.size,
+          color: item.color,
         })),
         gstPercent: taxPercent,
         discount: orderDiscount,
@@ -353,22 +373,6 @@ function PosPage() {
       };
 
       await saveInvoice({ data: invoicePayload });
-
-      for (const item of cart) {
-        await stockUpdate({
-          data: {
-            barcode: item.barcode,
-            product: item.product,
-            variant: item.variant !== "Default" ? item.variant : "",
-            sku: item.sku,
-            warehouse: item.warehouse,
-            movementType: "Stock Out",
-            quantity: item.qty,
-            reason: "Sale",
-            notes: `POS invoice ${invoicePayload.invoice}`,
-          },
-        });
-      }
 
       await queryClient.invalidateQueries({ queryKey: ["erp"] });
       setCart([]);

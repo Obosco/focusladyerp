@@ -1,5 +1,5 @@
 // Server-only Google Sheets helpers backed by a service account.
-import { createSign } from "node:crypto";
+import { createSign, randomUUID } from "node:crypto";
 import { readFileSync } from "node:fs";
 import { ALLOWED_SHEET_TITLES } from "./erp-modules";
 import { invoiceTotals } from "./invoice";
@@ -101,6 +101,7 @@ const DEFAULT_SHEET_HEADERS: Record<string, string[]> = {
   Products: ["ID", "Name", "Category", "Brand", "Description", "Unit", "Barcode", "Stock", "Cost", "Price", "Minimum Stock", "Status"],
   "Product Variants": ["Variant ID", "Product ID", "Variant Name", "SKU", "Barcode", "Barcode Type", "Size", "Color", "Design", "Purchase Price", "Selling Price", "Current Stock", "Minimum Stock", "Unit", "Status", "Created At", "Updated At"],
   Stock: ["Product", "Barcode", "Quantity", "Purchase", "Size", "Color"],
+  "Stock Movements": ["Movement ID", "Date", "Product ID", "Variant ID", "Product", "SKU", "Size", "Color", "Type", "Quantity", "Before Stock", "After Stock", "Reference Type", "Reference ID", "Supplier", "Batch Number", "Location", "Unit Cost", "Notes", "User"],
   Customers: ["ID", "Name", "Phone", "Address", "City", "State", "GSTIN", "Type", "Open Balance", "Paid", "Due", "Notes", "Active", "Created At", "Date", "Last Paid", "Customer Count", "Sales Value", "Total Due"],
   Suppliers: ["ID", "Name", "Phone", "Address", "City", "State", "GSTIN", "Category", "Notes"],
   Sales: ["Invoice", "Date", "Customer", "Subtotal", "GST", "Total", "Paid", "Due", "Status", "Notes", "Vehicle No", "Salesman", "GSTIN", "Mode", "Address", "Valid Until", "Customer ID"],
@@ -419,6 +420,60 @@ export async function appendRows(range: string, values: SheetValues) {
   invalidateSheetCache();
 }
 
+export async function appendRowsBatch(entries: Array<{ sheet: string; values: SheetValues }>) {
+  const activeEntries = entries.filter((entry) => entry.values.length > 0);
+  if (activeEntries.length === 0) return;
+  for (const entry of activeEntries) {
+    if (!ALLOWED_SHEET_TITLES.includes(entry.sheet)) {
+      throw new Error(`That worksheet is not available to this ERP: ${entry.sheet}`);
+    }
+    await ensureSheet(entry.sheet, DEFAULT_SHEET_HEADERS[entry.sheet] ?? []);
+  }
+
+  const metadata = await sheetsRequest<{
+    sheets?: Array<{ properties?: { sheetId?: number; title?: string } }>;
+  }>("?fields=sheets.properties(sheetId,title)");
+  const sheetIds = new Map(
+    (metadata.sheets ?? []).flatMap((sheet) =>
+      sheet.properties?.title !== undefined && sheet.properties.sheetId !== undefined
+        ? [[sheet.properties.title, sheet.properties.sheetId] as const]
+        : [],
+    ),
+  );
+  const requests = activeEntries.map((entry) => {
+    const sheetId = sheetIds.get(entry.sheet);
+    if (sheetId === undefined) throw new Error(`Could not find the ${entry.sheet} worksheet.`);
+    const headers = DEFAULT_SHEET_HEADERS[entry.sheet] ?? [];
+    return {
+      appendCells: {
+        sheetId,
+        rows: entry.values.map((row) => ({
+          values: row.map((value, index) => {
+            const numericColumn =
+              /(quantity|qty|stock|subtotal|gst|total|paid|due|price|cost|amount|rate|discount)/i.test(
+                headers[index] ?? "",
+              );
+            const numericValue = Number(value);
+            return {
+              userEnteredValue:
+                numericColumn && value.trim() !== "" && Number.isFinite(numericValue)
+                  ? { numberValue: numericValue }
+                  : { stringValue: value },
+            };
+          }),
+        })),
+        fields: "userEnteredValue",
+      },
+    };
+  });
+
+  await sheetsRequest(":batchUpdate", {
+    method: "POST",
+    body: JSON.stringify({ requests }),
+  });
+  invalidateSheetCache();
+}
+
 export async function updateRange(range: string, values: SheetValues) {
   assertAllowedRange(range);
   await sheetsRequest(`/values/${encodeURIComponent(range)}?valueInputOption=USER_ENTERED`, {
@@ -518,6 +573,220 @@ export type ProductInput = {
   }>;
 };
 
+export type StockMovementType =
+  | "OPENING"
+  | "PURCHASE"
+  | "SALE"
+  | "SALES_RETURN"
+  | "PURCHASE_RETURN"
+  | "MANUAL_ADJUSTMENT"
+  | "DAMAGE"
+  | "TRANSFER_IN"
+  | "TRANSFER_OUT";
+
+export type InventorySnapshot = {
+  products: SheetValues;
+  variants: SheetValues;
+  movements: SheetValues;
+  suppliers: SheetValues;
+};
+
+const STOCK_MOVEMENT_TYPES: StockMovementType[] = [
+  "OPENING",
+  "PURCHASE",
+  "SALE",
+  "SALES_RETURN",
+  "PURCHASE_RETURN",
+  "MANUAL_ADJUSTMENT",
+  "DAMAGE",
+  "TRANSFER_IN",
+  "TRANSFER_OUT",
+];
+
+export async function getInventorySnapshot(): Promise<InventorySnapshot> {
+  await ensureSheet("Stock Movements", DEFAULT_SHEET_HEADERS["Stock Movements"]);
+  const [products, variants, movements, suppliers] = await readRanges([
+    "Products!A2:L5000",
+    "'Product Variants'!A2:Q10000",
+    "'Stock Movements'!A2:T50000",
+    "Suppliers!A2:I5000",
+  ]);
+  return { products, variants, movements, suppliers };
+}
+
+function inventoryBalance(
+  productId: string,
+  variantId: string,
+  products: SheetValues,
+  variants: SheetValues,
+  movements: SheetValues,
+) {
+  const product = products.find((row) => String(row[0] ?? "").trim() === productId);
+  const variant = variants.find((row) => String(row[0] ?? "").trim() === variantId);
+  const opening = variant ? Number(variant[11] ?? 0) : Number(product?.[7] ?? 0);
+  const movementTotal = movements
+    .filter(
+      (row) =>
+        String(row[2] ?? "").trim() === productId &&
+        String(row[3] ?? "").trim() === variantId,
+    )
+    .reduce((total, row) => total + Number(row[9] ?? 0), 0);
+  return opening + movementTotal;
+}
+
+type StockMovementRecordInput = {
+  productId: string;
+  variantId?: string;
+  type: StockMovementType;
+  quantity: number;
+  referenceType: string;
+  referenceId: string;
+  supplier?: string;
+  batchNumber?: string;
+  location?: string;
+  unitCost?: number;
+  notes?: string;
+  date?: string;
+  user?: string;
+};
+
+async function appendInventoryMovement(
+  input: StockMovementRecordInput,
+  snapshot?: InventorySnapshot,
+  additionalEntries: Array<{ sheet: string; values: SheetValues }> = [],
+) {
+  if (!STOCK_MOVEMENT_TYPES.includes(input.type)) {
+    throw new Error("Select a valid stock movement type.");
+  }
+  if (!Number.isFinite(input.quantity) || input.quantity === 0) {
+    throw new Error("Stock movement quantity must be a non-zero number.");
+  }
+
+  const inventory = snapshot ?? (await getInventorySnapshot());
+  const product = inventory.products.find(
+    (row) => String(row[0] ?? "").trim() === input.productId,
+  );
+  if (!product) throw new Error("The selected product no longer exists.");
+  const variantId = String(input.variantId ?? "").trim();
+  const variant = variantId
+    ? inventory.variants.find(
+        (row) =>
+          String(row[0] ?? "").trim() === variantId &&
+          String(row[1] ?? "").trim() === input.productId,
+      )
+    : undefined;
+  if (variantId && !variant) {
+    throw new Error("The selected variant does not belong to this product.");
+  }
+  if (
+    !variantId &&
+    inventory.variants.some((row) => String(row[1] ?? "").trim() === input.productId)
+  ) {
+    throw new Error("Choose a variant for this product before recording stock.");
+  }
+
+  const before = inventoryBalance(
+    input.productId,
+    variantId,
+    inventory.products,
+    inventory.variants,
+    inventory.movements,
+  );
+  const after = before + input.quantity;
+  const row = [
+    randomUUID(),
+    input.date ?? new Date().toISOString().slice(0, 10),
+    input.productId,
+    variantId,
+    String(product[1] ?? ""),
+    String(variant?.[3] ?? ""),
+    String(variant?.[6] ?? ""),
+    String(variant?.[7] ?? ""),
+    input.type,
+    String(input.quantity),
+    String(before),
+    String(after),
+    input.referenceType,
+    input.referenceId,
+    input.supplier ?? "",
+    input.batchNumber ?? "",
+    input.location ?? "Main Store",
+    String(input.unitCost ?? variant?.[9] ?? product[8] ?? 0),
+    input.notes ?? "",
+    input.user ?? "Authenticated user",
+  ];
+  await appendRowsBatch([
+    { sheet: "Stock Movements", values: [row] },
+    ...additionalEntries,
+  ]);
+  return { before, after, movementId: row[0] };
+}
+
+export type ManualStockInput = {
+  productId: string;
+  variantId?: string;
+  quantity: number;
+  purchasePrice?: number;
+  supplier?: string;
+  batchNumber?: string;
+  location?: string;
+  notes?: string;
+  date?: string;
+};
+
+export async function addInventoryStock(input: ManualStockInput, user = "Authenticated user") {
+  const snapshot = await getInventorySnapshot();
+  return appendInventoryMovement(
+    {
+      ...input,
+      type: "MANUAL_ADJUSTMENT",
+      referenceType: "MANUAL_STOCK",
+      referenceId: randomUUID(),
+      quantity: Math.abs(input.quantity),
+      unitCost: input.purchasePrice,
+      user,
+    },
+    snapshot,
+  );
+}
+
+export type StockAdjustmentInput = {
+  productId: string;
+  variantId?: string;
+  physicalStock: number;
+  reason: string;
+  notes?: string;
+  date?: string;
+};
+
+export async function adjustInventoryStock(input: StockAdjustmentInput, user = "Authenticated user") {
+  if (!Number.isFinite(input.physicalStock) || input.physicalStock < 0) {
+    throw new Error("Physical stock must be zero or greater.");
+  }
+  const snapshot = await getInventorySnapshot();
+  const current = inventoryBalance(
+    input.productId,
+    String(input.variantId ?? "").trim(),
+    snapshot.products,
+    snapshot.variants,
+    snapshot.movements,
+  );
+  const difference = input.physicalStock - current;
+  if (difference === 0) throw new Error("Physical stock matches the system quantity.");
+  return appendInventoryMovement(
+    {
+      ...input,
+      type: "MANUAL_ADJUSTMENT",
+      referenceType: "STOCK_ADJUSTMENT",
+      referenceId: randomUUID(),
+      quantity: difference,
+      notes: [input.reason, input.notes].filter(Boolean).join(" - "),
+      user,
+    },
+    snapshot,
+  );
+}
+
 function normalizeBarcode(value: string | undefined) {
   return String(value ?? "").trim();
 }
@@ -559,9 +828,10 @@ async function checkDuplicateBarcode(barcode: string, skipId?: string) {
   });
 }
 
-export async function createProduct(p: ProductInput) {
+export async function createProduct(p: ProductInput, user = "Authenticated user") {
   await ensureSheet("Products", DEFAULT_SHEET_HEADERS.Products);
   await ensureSheet("Product Variants", DEFAULT_SHEET_HEADERS["Product Variants"]);
+  await ensureSheet("Stock Movements", DEFAULT_SHEET_HEADERS["Stock Movements"]);
   await ensureSheet("Barcode Database", DEFAULT_SHEET_HEADERS["Barcode Database"]);
 
   const productBarcode = normalizeBarcode(p.barcode);
@@ -592,6 +862,7 @@ export async function createProduct(p: ProductInput) {
   ]);
 
   const variants = (p.variants ?? []).filter((variant) => variant.variantName || variant.sku || variant.barcode || variant.size || variant.color);
+  const openingMovements: SheetValues = [];
   for (const variant of variants) {
     const variantBarcode = normalizeBarcode(variant.barcode);
     if (variantBarcode && !isValidBarcode(variantBarcode, variant.barcodeType)) {
@@ -616,13 +887,38 @@ export async function createProduct(p: ProductInput) {
       variant.design ?? "",
       String(variant.purchasePrice ?? p.cost ?? 0),
       String(variant.sellingPrice ?? p.price ?? 0),
-      String(variant.currentStock ?? 0),
+      "0",
       String(variant.minimumStock ?? p.minimumStock ?? 0),
       variant.unit ?? p.unit ?? "",
       variant.status ?? "Active",
       createdAt,
       createdAt,
     ]]);
+    const openingQuantity = Number(variant.currentStock ?? 0);
+    if (openingQuantity > 0) {
+      openingMovements.push([
+        randomUUID(),
+        createdAt.slice(0, 10),
+        id,
+        variantId,
+        p.name,
+        variant.sku ?? "",
+        variant.size ?? p.size ?? "",
+        variant.color ?? p.color ?? "",
+        "OPENING",
+        String(openingQuantity),
+        "0",
+        String(openingQuantity),
+        "PRODUCT_CREATION",
+        id,
+        "",
+        "",
+        "Main Store",
+        String(variant.purchasePrice ?? p.cost ?? 0),
+        "Initial stock",
+        user,
+      ]);
+    }
 
     if (variantBarcode) {
       await appendRows("Barcode Database!A:S", [[
@@ -646,6 +942,10 @@ export async function createProduct(p: ProductInput) {
         createdAt,
       ]]);
     }
+  }
+
+  if (openingMovements.length > 0) {
+    await appendRows("'Stock Movements'!A:T", openingMovements);
   }
 
   if (productBarcode) {
@@ -752,6 +1052,43 @@ export async function createCustomer(c: CustomerInput) {
     paid: 0,
     notes: "",
   }, c.type);
+}
+
+export type SupplierInput = {
+  name: string;
+  phone?: string;
+  address?: string;
+  city?: string;
+  state?: string;
+  gstin?: string;
+  category?: string;
+  notes?: string;
+};
+
+export async function createSupplier(input: SupplierInput) {
+  await ensureSheet("Suppliers", DEFAULT_SHEET_HEADERS.Suppliers);
+  const rows = await readRange("Suppliers!A2:I5000");
+  const name = input.name.trim().replace(/\s+/g, " ");
+  if (
+    rows.some(
+      (row) => String(row[1] ?? "").trim().toLowerCase() === name.toLowerCase(),
+    )
+  ) {
+    throw new Error(`Supplier "${name}" already exists.`);
+  }
+  const id = `SUP-${String(rows.filter((row) => (row[0] ?? "").trim()).length + 1).padStart(4, "0")}`;
+  await appendRows("Suppliers!A:I", [[
+    id,
+    name,
+    input.phone ?? "",
+    input.address ?? "",
+    input.city ?? "",
+    input.state ?? "",
+    input.gstin ?? "",
+    input.category ?? "",
+    input.notes ?? "",
+  ]]);
+  return { id, name };
 }
 
 export type DealerInput = CustomerInput;
@@ -1050,6 +1387,7 @@ export async function updateDealerOrderDetails(orderId: string, input: DealerOrd
 
 export type InvoiceItemInput = {
   product: string;
+  variantId?: string;
   hsn?: string;
   qty: number;
   rate: number;
@@ -1102,80 +1440,155 @@ export function computeInvoice(input: InvoiceInput) {
   };
 }
 
-export async function saveInvoice(input: InvoiceInput) {
+export async function saveInvoice(input: InvoiceInput, user = "Authenticated user") {
   await ensureSheet("Sales", DEFAULT_SHEET_HEADERS.Sales);
   await ensureSheet("Stock", DEFAULT_SHEET_HEADERS.Stock);
   await ensureSheet("Customers", DEFAULT_SHEET_HEADERS.Customers);
   await ensureSheet("Customer Ledger", DEFAULT_SHEET_HEADERS["Customer Ledger"]);
   await ensureSheet("Daily Collection", DEFAULT_SHEET_HEADERS["Daily Collection"]);
   await ensureSheet("Sale Items", DEFAULT_SHEET_HEADERS["Sale Items"]);
+  await ensureSheet("Stock Movements", DEFAULT_SHEET_HEADERS["Stock Movements"]);
 
   const existingInvoices = await readRange("Sales!A2:A5000");
   if (existingInvoices.some((row) => String(row[0] ?? "").trim() === input.invoice.trim())) {
     throw new Error(`Invoice ${input.invoice} already exists.`);
+  }
+  const inventory = await getInventorySnapshot();
+  const movementRows: SheetValues = [];
+  const stagedBalances = new Map<string, number>();
+  if (input.mode !== "quotation") {
+    for (const item of input.items) {
+      const product = inventory.products.find(
+        (row) =>
+          String(row[1] ?? "").trim().toLowerCase() === item.product.trim().toLowerCase(),
+      );
+      if (!product) {
+        throw new Error(`Product "${item.product}" is not in the product catalogue.`);
+      }
+      const productId = String(product[0] ?? "").trim();
+      const productVariants = inventory.variants.filter(
+        (row) => String(row[1] ?? "").trim() === productId,
+      );
+      const variantId = String(item.variantId ?? "").trim();
+      if (productVariants.length > 0 && !variantId) {
+        throw new Error(`Choose a variant for "${item.product}" before saving the invoice.`);
+      }
+      const variant = variantId
+        ? productVariants.find((row) => String(row[0] ?? "").trim() === variantId)
+        : undefined;
+      if (variantId && !variant) {
+        throw new Error(`The selected variant does not belong to "${item.product}".`);
+      }
+      const key = `${productId}|${variantId}`;
+      const before =
+        stagedBalances.get(key) ??
+        inventoryBalance(
+          productId,
+          variantId,
+          inventory.products,
+          inventory.variants,
+          inventory.movements,
+        );
+      const after = before - item.qty;
+      stagedBalances.set(key, after);
+      movementRows.push([
+        randomUUID(),
+        input.date,
+        productId,
+        variantId,
+        String(product[1] ?? ""),
+        String(variant?.[3] ?? ""),
+        item.size ?? String(variant?.[6] ?? ""),
+        item.color ?? String(variant?.[7] ?? ""),
+        "SALE",
+        String(-item.qty),
+        String(before),
+        String(after),
+        "SALE",
+        input.invoice,
+        "",
+        "",
+        "Main Store",
+        String(variant?.[9] ?? product[8] ?? 0),
+        input.notes ?? "",
+        user,
+      ]);
+    }
   }
   const customer = await resolveCustomer(input);
   const { subtotal, gst, total, paid, due } = computeInvoice(input);
   const status = due <= 0 ? "Paid" : paid > 0 ? "Partial" : "Unpaid";
 
   try {
-    await appendRows("Sales!A:Q", [
-    [
-      input.invoice,
-      input.date,
-      input.customer,
-      String(subtotal),
-      String(gst),
-      String(total),
-      String(paid),
-      String(due),
-      status,
-      input.notes ?? "",
-      input.vehicleNo ?? "",
-      input.salesman ?? "",
-      input.gstin ?? "",
-      input.mode ?? "gst",
-      input.customerAddress ?? "",
-      input.validUntil ?? "",
-      customer.id,
-    ],
-    ]);
-
-    await appendRows(
-    "'Sale Items'!A:M",
-    input.items.map((i) => [
-      input.invoice,
-      input.date,
-      input.customer,
-      i.product,
-      i.hsn ?? "",
-      String(i.qty),
-      String(i.rate),
-      String(+(i.qty * i.rate).toFixed(2)),
-      String(i.gstPercent ?? input.gstPercent ?? 0),
-      String(+(i.qty * i.rate * ((i.gstPercent ?? input.gstPercent ?? 0) / 100)).toFixed(2)),
-      String(+(i.qty * i.rate * (1 + ((i.gstPercent ?? input.gstPercent ?? 0) / 100))).toFixed(2)),
-      i.size ?? "",
-      i.color ?? "",
-    ]),
-    );
-
-  // Stock out — one row per variant sold.
-    await appendRows(
-    "Stock!A:F",
-    input.items.map((i) => [i.product, "", String(i.qty), "", i.size ?? "", i.color ?? ""]),
-    );
-
-  // Customer ledger: invoice debits the customer, payment credits it.
-    await appendRows("'Customer Ledger'!A:E", [
-    [input.date, input.customer, String(total), String(paid), String(due)],
-    ]);
-
-  if (paid > 0) {
-      await appendRows("'Daily Collection'!A:E", [
-      [input.date, input.customer, input.invoice, String(paid), input.paymentMode || "Cash"],
-      ]);
+    const transactionEntries: Array<{ sheet: string; values: SheetValues }> = [
+      {
+        sheet: "Sales",
+        values: [[
+          input.invoice,
+          input.date,
+          input.customer,
+          String(subtotal),
+          String(gst),
+          String(total),
+          String(paid),
+          String(due),
+          status,
+          input.notes ?? "",
+          input.vehicleNo ?? "",
+          input.salesman ?? "",
+          input.gstin ?? "",
+          input.mode ?? "gst",
+          input.customerAddress ?? "",
+          input.validUntil ?? "",
+          customer.id,
+        ]],
+      },
+      {
+        sheet: "Sale Items",
+        values: input.items.map((item) => [
+          input.invoice,
+          input.date,
+          input.customer,
+          item.product,
+          item.hsn ?? "",
+          String(item.qty),
+          String(item.rate),
+          String(+(item.qty * item.rate).toFixed(2)),
+          String(item.gstPercent ?? input.gstPercent ?? 0),
+          String(+(item.qty * item.rate * ((item.gstPercent ?? input.gstPercent ?? 0) / 100)).toFixed(2)),
+          String(+(item.qty * item.rate * (1 + ((item.gstPercent ?? input.gstPercent ?? 0) / 100))).toFixed(2)),
+          item.size ?? "",
+          item.color ?? "",
+        ]),
+      },
+      {
+        sheet: "Customer Ledger",
+        values: [[input.date, input.customer, String(total), String(paid), String(due)]],
+      },
+    ];
+    if (input.mode !== "quotation") {
+      transactionEntries.push(
+        {
+          sheet: "Stock",
+          values: input.items.map((item) => [
+            item.product,
+            "",
+            String(item.qty),
+            "",
+            item.size ?? "",
+            item.color ?? "",
+          ]),
+        },
+        { sheet: "Stock Movements", values: movementRows },
+      );
     }
+    if (paid > 0) {
+      transactionEntries.push({
+        sheet: "Daily Collection",
+        values: [[input.date, input.customer, input.invoice, String(paid), input.paymentMode || "Cash"]],
+      });
+    }
+    await appendRowsBatch(transactionEntries);
   } catch (error) {
     if (customer.created) await clearRange(`Customers!A${customer.row}:T${customer.row}`).catch(() => undefined);
     throw error;
@@ -1215,20 +1628,67 @@ export type StockMovementInput = {
   notes?: string;
 };
 
-export async function recordStockMovement(input: StockMovementInput) {
+export async function recordStockMovement(input: StockMovementInput, user = "Authenticated user") {
   await ensureSheet("Stock", DEFAULT_SHEET_HEADERS.Stock);
   const qty = Number(input.quantity ?? 0);
   const barcode = String(input.barcode ?? "").trim();
   if (!Number.isFinite(qty) || qty <= 0) throw new Error("Quantity must be greater than zero.");
 
-  await appendRows("Stock!A:F", [[
-    input.product ?? "Unknown Product",
-    barcode,
-    String(qty),
-    input.movementType,
-    input.variant ?? "",
-    input.warehouse ?? "Main Store",
-  ]]);
+  const inventory = await getInventorySnapshot();
+  const product = inventory.products.find(
+    (row) =>
+      String(row[0] ?? "").trim() === String(input.product ?? "").trim() ||
+      String(row[1] ?? "").trim().toLowerCase() === String(input.product ?? "").trim().toLowerCase(),
+  );
+  if (!product) throw new Error(`Product "${input.product ?? ""}" is not in the product catalogue.`);
+  const productId = String(product[0] ?? "").trim();
+  const variants = inventory.variants.filter((row) => String(row[1] ?? "").trim() === productId);
+  const variantValue = String(input.variant ?? "").trim().toLowerCase();
+  const variant = variants.find(
+    (row) =>
+      (barcode && String(row[4] ?? "").trim() === barcode) ||
+      [row[0], row[2], row[3], row[6], row[7], [row[6], row[7]].filter(Boolean).join(" / ")]
+        .some((value) => String(value ?? "").trim().toLowerCase() === variantValue),
+  );
+  if (variants.length > 0 && !variant) {
+    throw new Error(`Choose a valid variant for "${input.product ?? ""}".`);
+  }
+  const quantity = input.movementType === "Stock Out" ? -qty : qty;
+  const reason = String(input.reason ?? "").trim();
+  const movementType: StockMovementType =
+    input.movementType === "Stock Out"
+      ? /damage/i.test(reason)
+        ? "DAMAGE"
+        : /sale/i.test(reason)
+          ? "SALE"
+          : "MANUAL_ADJUSTMENT"
+      : "MANUAL_ADJUSTMENT";
+  await appendInventoryMovement(
+    {
+      productId,
+      variantId: variant?.[0] ?? "",
+      type: movementType,
+      quantity,
+      referenceType: "STOCK_SCANNER",
+      referenceId: randomUUID(),
+      location: input.warehouse ?? "Main Store",
+      unitCost: Number(variant?.[9] ?? product[8] ?? 0),
+      notes: [reason, input.notes].filter(Boolean).join(" - "),
+      user,
+    },
+    inventory,
+    [{
+      sheet: "Stock",
+      values: [[
+        input.product ?? "Unknown Product",
+        barcode,
+        String(qty),
+        input.movementType,
+        input.variant ?? "",
+        input.warehouse ?? "Main Store",
+      ]],
+    }],
+  );
 
   return {
     ok: true,
@@ -1239,51 +1699,99 @@ export async function recordStockMovement(input: StockMovementInput) {
   };
 }
 
-export async function saveReturn(input: ReturnInput) {
+export async function saveReturn(input: ReturnInput, user = "Authenticated user") {
   await ensureSheet("Returns", DEFAULT_SHEET_HEADERS.Returns);
   await ensureSheet("Stock", DEFAULT_SHEET_HEADERS.Stock);
   await ensureSheet("Customer Ledger", DEFAULT_SHEET_HEADERS["Customer Ledger"]);
+  await ensureSheet("Stock Movements", DEFAULT_SHEET_HEADERS["Stock Movements"]);
 
   const existing = await readRange("Returns!A2:A2000");
   const id = `RET-${String(existing.filter((r) => (r[0] ?? "").trim()).length + 1).padStart(4, "0")}`;
   const amount = input.items.reduce((a, i) => a + i.qty * i.rate, 0);
 
-  await appendRows(
-    "Returns!A:K",
-    input.items.map((i) => [
-      id,
-      input.date,
-      input.invoice,
-      input.customer,
-      i.product,
-      i.size ?? "",
-      i.color ?? "",
-      String(i.qty),
-      String(+(i.qty * i.rate).toFixed(2)),
-      input.type,
-      input.reason ?? "",
-    ]),
-  );
-
-  // Returned goods go back into stock (exchanges are re-issued on a new invoice).
-  if (input.type === "Return") {
-    await appendRows(
-      "Stock!A:F",
-      input.items.map((i) => [
-        i.product,
-        String(i.qty),
-        "",
-        "",
-        i.size ?? "",
-        i.color ?? "",
+  const transactionEntries: Array<{ sheet: string; values: SheetValues }> = [
+    {
+      sheet: "Returns",
+      values: input.items.map((item) => [
+        id,
+        input.date,
+        input.invoice,
+        input.customer,
+        item.product,
+        item.size ?? "",
+        item.color ?? "",
+        String(item.qty),
+        String(+(item.qty * item.rate).toFixed(2)),
+        input.type,
+        input.reason ?? "",
       ]),
+    },
+  ];
+  if (input.type === "Return") {
+    const inventory = await getInventorySnapshot();
+    const movementRows: SheetValues = [];
+    const stagedBalances = new Map<string, number>();
+    for (const item of input.items) {
+      const product = inventory.products.find(
+        (row) =>
+          String(row[1] ?? "").trim().toLowerCase() === item.product.trim().toLowerCase(),
+      );
+      if (!product) {
+        throw new Error(`Product "${item.product}" is not in the product catalogue.`);
+      }
+      const productId = String(product[0] ?? "").trim();
+      const productVariants = inventory.variants.filter(
+        (row) => String(row[1] ?? "").trim() === productId,
+      );
+      const variant = productVariants.find(
+        (row) =>
+          String(row[6] ?? "").trim().toLowerCase() === String(item.size ?? "").trim().toLowerCase() &&
+          String(row[7] ?? "").trim().toLowerCase() === String(item.color ?? "").trim().toLowerCase(),
+      );
+      if (productVariants.length > 0 && !variant) {
+        throw new Error(`Choose the matching variant for returned product "${item.product}".`);
+      }
+      const variantId = String(variant?.[0] ?? "");
+      const key = `${productId}|${variantId}`;
+      const before =
+        stagedBalances.get(key) ??
+        inventoryBalance(
+          productId,
+          variantId,
+          inventory.products,
+          inventory.variants,
+          inventory.movements,
+        );
+      const after = before + item.qty;
+      stagedBalances.set(key, after);
+      movementRows.push([
+        randomUUID(), input.date, productId, variantId, String(product[1] ?? ""),
+        String(variant?.[3] ?? ""), item.size ?? String(variant?.[6] ?? ""),
+        item.color ?? String(variant?.[7] ?? ""), "SALES_RETURN", String(item.qty),
+        String(before), String(after), "SALES_RETURN", id, "", "", "Main Store",
+        String(variant?.[9] ?? product[8] ?? 0), input.reason ?? "", user,
+      ]);
+    }
+    transactionEntries.push(
+      { sheet: "Stock Movements", values: movementRows },
+      {
+        sheet: "Stock",
+        values: input.items.map((item) => [
+          item.product,
+          String(item.qty),
+          "",
+          "",
+          item.size ?? "",
+          item.color ?? "",
+        ]),
+      },
+      {
+        sheet: "Customer Ledger",
+        values: [[input.date, input.customer, "0", String(+amount.toFixed(2)), `Return ${id}`]],
+      },
     );
-    // Credit the customer's ledger by the returned amount.
-    await appendRows("'Customer Ledger'!A:E", [
-      [input.date, input.customer, "0", String(+amount.toFixed(2)), `Return ${id}`],
-    ]);
   }
+  await appendRowsBatch(transactionEntries);
 
   return { id, amount: +amount.toFixed(2) };
 }
-

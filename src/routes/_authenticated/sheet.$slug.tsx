@@ -121,9 +121,14 @@ function SheetPage() {
       }
     >
       {mod.slug === "products" ? (
-        <Button variant="outline" size="sm" asChild className="mr-2">
-          <Link to="/products/new">Add product</Link>
-        </Button>
+        <>
+          <Button variant="outline" size="sm" asChild className="mr-2">
+            <Link to="/inventory/$view" params={{ view: "add" }}>+ Add Stock</Link>
+          </Button>
+          <Button variant="outline" size="sm" asChild className="mr-2">
+            <Link to="/products/new">+ Add Product</Link>
+          </Button>
+        </>
       ) : null}
       <SheetView sheet={mod.sheet} filename={mod.slug} title={mod.label} />
     </ErpShell>
@@ -168,4 +173,3 @@ function SheetView({
   const rows = values.slice(1).filter(Array.isArray) as string[][];
   return <SheetTable headers={headers} rows={rows} filename={filename} title={title} />;
 }
-

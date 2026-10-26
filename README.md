@@ -1683,3 +1683,13 @@ function InvoiceView({ json }: { json: Invoice }) {
 Use `InvoicePreviewPage` when Print, Download PDF (browser print dialog), and WhatsApp
 sharing controls are needed. The authenticated invoice route maps existing sheet rows
 into this shape.
+
+## Inventory movement ledger
+
+Inventory is projected per product variant from its opening balance and the append-only
+`Stock Movements` sheet. Product creation records any supplied initial variant quantity
+as an `OPENING` movement; manual stock receipts and physical-count corrections are
+recorded as `MANUAL_ADJUSTMENT` movements with before/after balances. Invoice sales and
+sales returns record `SALE` and `SALES_RETURN` movements respectively. Use the Inventory
+navigation for current stock, low stock, movement history, stock entry, and adjustments.
+The movement sheet is created automatically when inventory is first opened or written.
